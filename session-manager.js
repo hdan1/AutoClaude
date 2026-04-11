@@ -118,6 +118,10 @@ class SessionManager extends EventEmitter {
     let crashRetryCount = 0;
     let derailmentCount = 0;
     let contextRecoveryCount = 0;
+    let totalCorrections = 0;         // Combined autoNext + derailment counter (never resets)
+    const MAX_TOTAL_CORRECTIONS = 15; // Hard backstop — prevents any infinite correction loop
+    let totalCrashRetries = 0;        // Session-wide crash counter (never resets)
+    const MAX_SESSION_CRASHES = 10;   // Hard cap on total crash retries per session
     // Loop detection: sliding window of recent auto-next prompts + output fingerprints
     const autoNextHistory = []; // { prompt, outputHash }
     const MAX_HISTORY = 10;
@@ -155,6 +159,12 @@ class SessionManager extends EventEmitter {
       if (result.exitCode && result.exitCode !== 0) {
         if (this.autonomy.shouldRetry(result.exitCode, result.error, crashRetryCount)) {
           crashRetryCount++;
+          totalCrashRetries++;
+          if (totalCrashRetries > MAX_SESSION_CRASHES) {
+            this.send(tabId, 'log', { type: 'system', text: `⚠ Session crash limit reached (${totalCrashRetries} total retries) — stopping` });
+            this.emit('notify', { type: 'error', title: 'Auto Claude — Crash Limit', body: `${totalCrashRetries} crashes this session. Stopping.` });
+            break;
+          }
           const maxR = this.config.resilience?.maxCrashRetries || 3;
           const msg = `Crash retry ${crashRetryCount}/${maxR} (exit ${result.exitCode})...`;
           this.send(tabId, 'log', { type: 'system', text: msg });
@@ -262,6 +272,12 @@ class SessionManager extends EventEmitter {
 
         session.state.lastAutoNextPrompt = nextAction.prompt;
         derailmentCount = 0; // Reset derailment counter on successful auto-next
+        totalCorrections++;
+        if (totalCorrections > MAX_TOTAL_CORRECTIONS) {
+          this.send(tabId, 'log', { type: 'system', text: `⚠ Total correction limit reached (${totalCorrections} auto-next + derailment corrections) — stopping` });
+          this.emit('notify', { type: 'error', title: 'Auto Claude — Correction Limit', body: `${totalCorrections} total corrections. Stopping.` });
+          break;
+        }
         if (nextAction.delaySecs) {
           this.send(tabId, 'log', { type: 'system', text: `\u23f3 ${nextAction.reason} \u2014 waiting ${nextAction.delaySecs}s before checking...` });
           await this._sleep(nextAction.delaySecs * 1000);
@@ -279,12 +295,17 @@ class SessionManager extends EventEmitter {
       const derail = this.autonomy.detectDerailment(result, session);
       if (derail) {
         derailmentCount++;
+        totalCorrections++;
         const MAX_DERAILMENTS = 3;
-        if (derailmentCount > MAX_DERAILMENTS) {
-          this.send(tabId, 'log', { type: 'system', text: `\u26a0 Derailment correction repeated ${derailmentCount} times \u2014 pausing for user input` });
+        if (derailmentCount > MAX_DERAILMENTS || totalCorrections > MAX_TOTAL_CORRECTIONS) {
+          this.send(tabId, 'log', { type: 'system', text: `\u26a0 Derailment correction repeated ${derailmentCount} times (${totalCorrections} total corrections) \u2014 pausing for user input` });
           this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Derailment Loop', body: 'Repeated corrections failed. Pausing.' });
           break;
         }
+        // Track derailment prompts in autoNextHistory for oscillation detection
+        const outputHash = this._fingerprint(result.fullText);
+        autoNextHistory.push({ prompt: derail.prompt, outputHash });
+        if (autoNextHistory.length > MAX_HISTORY) autoNextHistory.shift();
         this.send(tabId, 'log', { type: 'system', text: `\u26a0 ${derail.reason} \u2014 redirecting... (${derailmentCount}/${MAX_DERAILMENTS})` });
         this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Course Correction', body: derail.reason });
         turnPrompt = derail.prompt;
