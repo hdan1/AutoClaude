@@ -696,14 +696,17 @@ class SessionManager extends EventEmitter {
   }
 
   _waitForAnswerWithTimeout(session, timeoutMs) {
+    // B5: Clear any existing timer before setting a new resolve to prevent orphaned promises
+    if (session._answerTimer) clearTimeout(session._answerTimer);
     return new Promise(resolve => {
-      let timer = null;
       session.answerResolve = () => {
-        if (timer) clearTimeout(timer);
+        if (session._answerTimer) clearTimeout(session._answerTimer);
+        session._answerTimer = null;
         resolve(true);
       };
-      timer = setTimeout(() => {
+      session._answerTimer = setTimeout(() => {
         session.answerResolve = null;
+        session._answerTimer = null;
         resolve(false);
       }, timeoutMs);
     });
