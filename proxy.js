@@ -3,6 +3,7 @@ const EventEmitter = require('events');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const logger = require('./lib/logger');
 const claudeDetector = require('./lib/claude-detector');
 const summarize = require('./lib/summarize');
 const { runPtyCommand, classifyPtyRun, normalizePtyError } = require('./lib/pty-executor');
@@ -18,6 +19,10 @@ const {
   RING_BUFFER_TOOL_CALLS,
   QUESTION_TOOL_NAMES,
   MAX_HOOK_LOG_BYTES,
+  SDK_MIN_VERSION,
+  SDK_KEEPALIVE_INTERVAL_MS,
+  SDK_INPUT_FORMAT,
+  SDK_OUTPUT_FORMAT,
 } = require('./lib/constants');
 
 class ClaudeProxy extends EventEmitter {
@@ -32,6 +37,8 @@ class ClaudeProxy extends EventEmitter {
     this.worktreeHookByteOffset = 0;
     this.worktreeDir = null;
     this._readCounts = new Map(); // Track file read counts for redundancy detection
+    this.sdkMode = false; // set in _execute
+    this._keepAliveTimer = null;
   }
 
   run(projectDir, options) {
@@ -42,25 +49,39 @@ class ClaudeProxy extends EventEmitter {
     return new Promise((resolve) => {
       this.aborted = true;
       this._stopHookWatcher();
+      if (this._keepAliveTimer) { clearInterval(this._keepAliveTimer); this._keepAliveTimer = null; }
       if (!this.process) { resolve(); return; }
       const pid = this.process.pid;
       const proc = this.process;
       this.process = null;
 
-      const timeout = setTimeout(() => resolve(), 5000);
+      const timeout = setTimeout(() => {
+        // A1: Escalate to SIGKILL after 3s if still alive
+        try {
+          if (os.platform() === 'win32' && pid) {
+            execFile('taskkill', ['/F', '/T', '/PID', String(pid)],
+              { timeout: 3000, windowsHide: true }, () => {});
+          } else if (pid) {
+            process.kill(pid, 'SIGKILL');
+          }
+        } catch { /* already dead */ }
+        setTimeout(resolve, 500); // Give OS time to clean up
+      }, 3000);
+
       proc.on('close', () => { clearTimeout(timeout); resolve(); });
 
       try {
-        // On Windows, SIGTERM only kills the parent shell, not child processes.
-        // Use async execFile with taskkill /T to kill the entire process tree
-        // without blocking the main process (PERF-04).
         if (os.platform() === 'win32' && pid) {
-          execFile('taskkill', ['/T', '/PID', String(pid), '/F'],
+          execFile('taskkill', ['/T', '/PID', String(pid)],
             { timeout: 5000, windowsHide: true }, () => {});
         } else {
           proc.kill('SIGTERM');
         }
-      } catch { resolve(); }
+      } catch (e) {
+        logger.debug('proxy', `kill failed for PID ${pid}: ${e.message}`);
+        clearTimeout(timeout);
+        resolve();
+      }
     });
   }
 
@@ -97,68 +118,69 @@ class ClaudeProxy extends EventEmitter {
 
   _execute(projectDir, options) {
     this._lastProjectDir = projectDir;
-    return new Promise((resolve) => {
-      const result = {
-        startTime: Date.now(),
-        firstTokenTime: null,
-        endTime: null,
-        ttft: null,
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadTokens: 0,
-        cacheCreateTokens: 0,
-        costUsd: 0,
-        numTurns: 0,
-        model: '',
-        sessionId: null,
-        timeline: [],
-        hookEvents: [],
-        toolCalls: [],
-        fullText: '',
-        resultText: null,
-        error: null,
-        exitCode: null,
-      };
+    const result = {
+      startTime: Date.now(),
+      firstTokenTime: null,
+      endTime: null,
+      ttft: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreateTokens: 0,
+      costUsd: 0,
+      numTurns: 0,
+      model: '',
+      sessionId: null,
+      timeline: [],
+      hookEvents: [],
+      toolCalls: [],
+      fullText: '',
+      resultText: null,
+      error: null,
+      exitCode: null,
+    };
 
-      // Start watching the hook log for subagent activity
-      this._startHookWatcher(projectDir, result);
+    // Start watching the hook log for subagent activity
+    this._startHookWatcher(projectDir, result);
 
-      const plan = ClaudeProxy._resolveExecutionPlan(options, this.config);
-      this.emit('event', { type: 'execution-mode', mode: plan.mode, reason: plan.reason, prompt: plan.originalPrompt });
+    const plan = ClaudeProxy._resolveExecutionPlan(options, this.config);
+    this.emit('event', { type: 'execution-mode', mode: plan.mode, reason: plan.reason, prompt: plan.originalPrompt });
 
-      if (plan.mode === 'pty-fallback') {
-        (async () => {
-          try {
-            const raw = await runPtyCommand({
-              cwd: projectDir,
-              prompt: plan.originalPrompt,
-              timeoutMs: plan.timeoutMs,
-              skipPermissions: this.config.skipPermissions !== false,
-            });
-            const classified = classifyPtyRun(raw);
-            ClaudeProxy._applyPtyFallbackResult(result, { ...classified, stdout: raw.stdout, stderr: raw.stderr });
-            this._mergeToolCalls(result);
-            return resolve(result);
-          } catch (err) {
-            result.error = normalizePtyError(err);
-            this._mergeToolCalls(result);
-            return resolve(result);
-          }
-        })();
-        return;
-      }
+    if (plan.mode === 'pty-fallback') {
+      return (async () => {
+        try {
+          const raw = await runPtyCommand({
+            cwd: projectDir,
+            prompt: plan.originalPrompt,
+            timeoutMs: plan.timeoutMs,
+            skipPermissions: this.config.skipPermissions !== false,
+          });
+          const classified = classifyPtyRun(raw);
+          ClaudeProxy._applyPtyFallbackResult(result, { ...classified, stdout: raw.stdout, stderr: raw.stderr });
+          this._mergeToolCalls(result);
+          return result;
+        } catch (err) {
+          result.error = normalizePtyError(err);
+          this._mergeToolCalls(result);
+          return result;
+        }
+      })();
+    }
 
-      // Build CLI args based on mode
+    this.sdkMode = this._supportsSDKMode();
+
+    if (this.sdkMode) {
+      return this._executeSDK(projectDir, options, plan, result);
+    }
+    return this._executePrintMode(projectDir, options, plan, result);
+  }
+
+  _executePrintMode(projectDir, options, plan, result) {
+    return new Promise(async (resolve) => {
       const args = plan.args;
 
-      // Stdin piped for sendResponse() but ended immediately to prevent
-      // Claude CLI's 3-second stdin wait warning. stdin.end() signals no
-      // piped input; sendResponse() reopens the write channel when needed.
-      // Resolve claude binary path — packaged Electron apps may not have
-      // ~/.local/bin on PATH, so use the absolute path when available.
-      const detection = claudeDetector.detect();
+      const detection = await claudeDetector.detect();
       const claudeBin = (detection.path && detection.path !== 'claude') ? detection.path : 'claude';
-      // Extend PATH with common install dirs so claude can find its deps
       const extraPaths = [
         path.join(os.homedir(), '.local', 'bin'),
         path.join(os.homedir(), '.claude', 'local'),
@@ -172,8 +194,6 @@ class ClaudeProxy extends EventEmitter {
         windowsHide: true,
       });
       // End stdin immediately to avoid "no stdin data received in 3s" warning.
-      // sendResponse() will still work because stdin.end() flushes but keeps
-      // the writable stream reference valid for future writes before close.
       this.process.stdin.end();
 
       let buffer = '';
@@ -194,7 +214,6 @@ class ClaudeProxy extends EventEmitter {
       });
 
       this.process.on('error', (err) => {
-        // L6: Graceful handling of claude CLI not found
         if (err.code === 'ENOENT') {
           result.error = 'Claude CLI not found. Please install it: npm install -g @anthropic-ai/claude-code';
           this.emit('process-error', result.error);
@@ -211,9 +230,83 @@ class ClaudeProxy extends EventEmitter {
         if (buffer.trim()) this._parseLine(buffer, result);
         if (result.firstTokenTime) result.ttft = result.firstTokenTime - result.startTime;
 
-        // M6: Give hooks a moment to flush, then read final state
-        setTimeout(() => {
-          this._flushHookLog(projectDir, result);
+        setTimeout(async () => {
+          await this._flushHookLog(projectDir, result);
+          this._stopHookWatcher();
+          this._mergeToolCalls(result);
+          resolve(result);
+        }, PROCESS_CLOSE_FLUSH_MS);
+      });
+    });
+  }
+
+  _executeSDK(projectDir, options, plan, result) {
+    return new Promise(async (resolve) => {
+      const prompt = options?.prompt || '';
+      const args = ClaudeProxy._buildSDKModeArgs(prompt, options, this.config);
+
+      const detection = await claudeDetector.detect();
+      const claudeBin = (detection.path && detection.path !== 'claude') ? detection.path : 'claude';
+      const extraPaths = [
+        path.join(os.homedir(), '.local', 'bin'),
+        path.join(os.homedir(), '.claude', 'local'),
+      ];
+      const spawnEnv = { ...process.env };
+      spawnEnv.PATH = extraPaths.join(path.delimiter) + path.delimiter + (spawnEnv.PATH || '');
+      spawnEnv.CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS = 'true';
+
+      this.process = spawn(claudeBin, args, {
+        cwd: projectDir,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: spawnEnv,
+        windowsHide: true,
+      });
+      // SDK mode: keep stdin OPEN for bidirectional communication
+
+      // Start keepalive heartbeat
+      this._keepAliveTimer = setInterval(() => this.sendKeepAlive(), SDK_KEEPALIVE_INTERVAL_MS);
+
+      let buffer = '';
+
+      this.process.stdout.on('data', (chunk) => {
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (line.trim()) this._parseLine(line, result);
+        }
+      });
+
+      this.process.stderr.on('data', (chunk) => {
+        const text = chunk.toString();
+        this.emit('stderr', text);
+        if (this._isRetryable(text)) result.error = text.trim();
+      });
+
+      this.process.on('error', (err) => {
+        if (err.code === 'ENOENT') {
+          result.error = 'Claude CLI not found. Please install it: npm install -g @anthropic-ai/claude-code';
+          this.emit('process-error', result.error);
+        } else {
+          result.error = err.message;
+          this.emit('process-error', err.message);
+        }
+      });
+
+      this.process.on('close', (code) => {
+        // Clear keepalive timer
+        if (this._keepAliveTimer) {
+          clearInterval(this._keepAliveTimer);
+          this._keepAliveTimer = null;
+        }
+        this.process = null;
+        result.exitCode = code;
+        result.endTime = Date.now();
+        if (buffer.trim()) this._parseLine(buffer, result);
+        if (result.firstTokenTime) result.ttft = result.firstTokenTime - result.startTime;
+
+        setTimeout(async () => {
+          await this._flushHookLog(projectDir, result);
           this._stopHookWatcher();
           this._mergeToolCalls(result);
           resolve(result);
@@ -236,6 +329,23 @@ class ClaudeProxy extends EventEmitter {
 
     const elapsed = Date.now() - result.startTime;
     const type = event.type;
+
+    // SDK mode: handle control requests (permission prompts)
+    if (type === 'control_request') {
+      this.emit('control-request', {
+        subtype: event.subtype,
+        toolName: event.tool_name,
+        input: event.input,
+        toolUseId: event.tool_use_id,
+      });
+      return;
+    }
+
+    // SDK mode: handle session state events
+    if (type === 'system' && event.subtype === 'session_state') {
+      this.emit('session-state', event.state);
+      return;
+    }
 
     if (type === 'system') {
       if (event.subtype === 'init' && event.session_id) {
@@ -394,16 +504,22 @@ class ClaudeProxy extends EventEmitter {
     }
 
     // M1: Poll with byte offset reads instead of re-reading entire file
-    this.hookWatcher = setInterval(() => {
-      this._readHookLog(logFile, result);
-    }, HOOK_POLL_INTERVAL_MS);
+    // Use recursive setTimeout to prevent overlapping async reads
+    const poll = async () => {
+      await this._readHookLog(logFile, result);
+      if (!this._hookWatcherStopped) {
+        this.hookWatcher = setTimeout(poll, HOOK_POLL_INTERVAL_MS);
+      }
+    };
+    this._hookWatcherStopped = false;
+    this.hookWatcher = setTimeout(poll, HOOK_POLL_INTERVAL_MS);
   }
 
-  // M1: Read only new bytes from hook log using byte offset
-  _readHookLog(logFile, result) {
+  // M1: Read only new bytes from hook log using byte offset (async I/O)
+  async _readHookLog(logFile, result) {
     try {
-      if (!fs.existsSync(logFile)) return;
-      const stat = fs.statSync(logFile);
+      let stat;
+      try { stat = await fs.promises.stat(logFile); } catch { return; }
       if (stat.size < this.hookByteOffset) { this.hookByteOffset = 0; }
       if (stat.size === this.hookByteOffset) return; // No new data
 
@@ -411,21 +527,28 @@ class ClaudeProxy extends EventEmitter {
       const maxBytes = ((this.config.hooks?.maxLogSizeMB || 5) * 1024 * 1024) || MAX_HOOK_LOG_BYTES;
       if (stat.size > maxBytes) {
         try {
-          const all = fs.readFileSync(logFile, 'utf8');
+          const all = await fs.promises.readFile(logFile, 'utf8');
           const lines = all.split('\n').filter(l => l.trim());
           const keep = lines.slice(Math.floor(lines.length / 2));
-          fs.writeFileSync(logFile, keep.join('\n') + '\n');
-          this.hookByteOffset = fs.statSync(logFile).size;
-          return; // Skip this poll cycle; next poll picks up normally
-        } catch { /* silent */ }
+          // R4: Atomic truncation — write to temp, rename over original
+          const tmpFile = logFile + '.tmp';
+          await fs.promises.writeFile(tmpFile, keep.join('\n') + '\n');
+          await fs.promises.rename(tmpFile, logFile);
+          const newStat = await fs.promises.stat(logFile);
+          this.hookByteOffset = newStat.size;
+          return;
+        } catch (e) { logger.debug('proxy', `hook log truncation failed: ${e.message}`); }
       }
 
       // Read only new bytes
-      const fd = fs.openSync(logFile, 'r');
       const newBytes = stat.size - this.hookByteOffset;
       const buf = Buffer.alloc(newBytes);
-      fs.readSync(fd, buf, 0, newBytes, this.hookByteOffset);
-      fs.closeSync(fd);
+      const fh = await fs.promises.open(logFile, 'r');
+      try {
+        await fh.read(buf, 0, newBytes, this.hookByteOffset);
+      } finally {
+        await fh.close();
+      }
 
       this.hookByteOffset = stat.size;
 
@@ -440,14 +563,14 @@ class ClaudeProxy extends EventEmitter {
           this.emit('hook-event', entry);
           // Track redundant file reads
           this._trackRedundantReads(entry);
-        } catch (err) { /* silent */ }
+        } catch (err) { logger.debug('proxy', `JSON parse failed: ${err.message}`); }
       }
-    } catch (err) { /* silent */ }
+    } catch (err) { logger.debug('proxy', `hook log read failed: ${err.message}`); }
   }
 
-  _flushHookLog(projectDir, result) {
+  async _flushHookLog(projectDir, result) {
     const logFile = path.join(projectDir, this.config.hooks?.logFile || '.planning/auto-claude-hooks.jsonl');
-    this._readHookLog(logFile, result);
+    await this._readHookLog(logFile, result);
   }
 
   // Detect when the same file is read 3+ times in one session (token waste signal)
@@ -465,12 +588,13 @@ class ClaudeProxy extends EventEmitter {
   }
 
   _stopHookWatcher() {
+    this._hookWatcherStopped = true;
     if (this.hookWatcher) {
-      clearInterval(this.hookWatcher);
+      clearTimeout(this.hookWatcher);
       this.hookWatcher = null;
     }
     if (this.worktreeHookWatcher) {
-      clearInterval(this.worktreeHookWatcher);
+      clearTimeout(this.worktreeHookWatcher);
       this.worktreeHookWatcher = null;
     }
   }
@@ -488,23 +612,30 @@ class ClaudeProxy extends EventEmitter {
       this.worktreeHookByteOffset = 0;
     }
 
-    this.worktreeHookWatcher = setInterval(() => {
-      this._readWorktreeHookLog(logFile, result);
-    }, HOOK_POLL_INTERVAL_MS);
+    const pollWorktree = async () => {
+      await this._readWorktreeHookLog(logFile, result);
+      if (!this._hookWatcherStopped) {
+        this.worktreeHookWatcher = setTimeout(pollWorktree, HOOK_POLL_INTERVAL_MS);
+      }
+    };
+    this.worktreeHookWatcher = setTimeout(pollWorktree, HOOK_POLL_INTERVAL_MS);
   }
 
-  _readWorktreeHookLog(logFile, result) {
+  async _readWorktreeHookLog(logFile, result) {
     try {
-      if (!fs.existsSync(logFile)) return;
-      const stat = fs.statSync(logFile);
+      let stat;
+      try { stat = await fs.promises.stat(logFile); } catch { return; }
       if (stat.size < this.worktreeHookByteOffset) { this.worktreeHookByteOffset = 0; }
       if (stat.size === this.worktreeHookByteOffset) return;
 
-      const fd = fs.openSync(logFile, 'r');
       const newBytes = stat.size - this.worktreeHookByteOffset;
       const buf = Buffer.alloc(newBytes);
-      fs.readSync(fd, buf, 0, newBytes, this.worktreeHookByteOffset);
-      fs.closeSync(fd);
+      const fh = await fs.promises.open(logFile, 'r');
+      try {
+        await fh.read(buf, 0, newBytes, this.worktreeHookByteOffset);
+      } finally {
+        await fh.close();
+      }
       this.worktreeHookByteOffset = stat.size;
 
       const lines = buf.toString('utf8').split('\n').filter(l => l.trim());
@@ -702,6 +833,64 @@ class ClaudeProxy extends EventEmitter {
     // e.g. "/gsd:new-project args" -> "/gsd-new-project args"
     p = p.replace(/^\/([a-zA-Z0-9_-]+):([a-zA-Z0-9_-]+)/, '/$1-$2');
     return p;
+  }
+
+  // ── SDK Mode Detection ────────────────────────────
+
+  _supportsSDKMode() {
+    try {
+      const version = this.config._claudeVersion || '';
+      return this._compareVersions(version, SDK_MIN_VERSION) >= 0;
+    } catch { return false; }
+  }
+
+  _compareVersions(a, b) {
+    const pa = (a || '0.0.0').split('.').map(Number);
+    const pb = (b || '0.0.0').split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+      if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+    }
+    return 0;
+  }
+
+  // ── SDK stdin communication ──────────────────────
+
+  _sendToStdin(message) {
+    if (!this.process || !this.process.stdin || this.process.stdin.destroyed) return false;
+    try {
+      this.process.stdin.write(JSON.stringify(message) + '\n');
+      return true;
+    } catch (e) {
+      logger.debug('proxy', `stdin write failed: ${e.message}`);
+      return false;
+    }
+  }
+
+  sendControlResponse(toolUseId, decision) {
+    return this._sendToStdin({
+      type: 'control_response',
+      tool_use_id: toolUseId,
+      decision,
+    });
+  }
+
+  sendKeepAlive() {
+    return this._sendToStdin({ type: 'keep_alive' });
+  }
+
+  static _buildSDKModeArgs(prompt, options, config) {
+    const args = ['-p', prompt, '--output-format', SDK_OUTPUT_FORMAT, '--input-format', SDK_INPUT_FORMAT];
+
+    if (options.sessionId) args.push('--session-id', options.sessionId);
+    if (options.resume) args.push('--resume', options.resume);
+    if (config.model && config.model !== 'auto') args.push('--model', config.model);
+    if (config.skipPermissions) args.push('--dangerously-skip-permissions');
+    args.push('--include-hook-events');
+    args.push('--replay-user-messages');
+    if (config.verbose) args.push('--verbose');
+
+    return args;
   }
 
   _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

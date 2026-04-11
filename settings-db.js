@@ -75,6 +75,8 @@ const CATEGORY_ORDER = [
 let _db = null;
 let _dbPath = null;
 let _SQL = null;
+let _saveTimer = null;
+const SAVE_DEBOUNCE_MS = 500;
 
 // ── Helpers ──────────────────────────────────────
 
@@ -180,7 +182,7 @@ function set(key, value, category) {
     'INSERT OR REPLACE INTO settings (key, value, category, updated_at) VALUES (?, ?, ?, ?)',
     [key, encoded, cat, Date.now()]
   );
-  save();
+  _scheduleSave();
 }
 
 function getGroup(category) {
@@ -224,7 +226,7 @@ function setMany(entries) {
 function del(key) {
   if (!_db) return;
   _db.run('DELETE FROM settings WHERE key = ?', [key]);
-  save();
+  _scheduleSave();
 }
 
 // ── Sessions ─────────────────────────────────────
@@ -248,13 +250,13 @@ function setSession(projectDir, sessionId) {
     'INSERT OR REPLACE INTO sessions (project_dir, session_id, timestamp) VALUES (?, ?, ?)',
     [projectDir, sessionId, Date.now()]
   );
-  save();
+  _scheduleSave();
 }
 
 function deleteSession(projectDir) {
   if (!_db) return;
   _db.run('DELETE FROM sessions WHERE project_dir = ?', [projectDir]);
-  save();
+  _scheduleSave();
 }
 
 function getAllSessions() {
@@ -273,7 +275,7 @@ function pruneSessionsOlderThan(ms) {
   if (!_db) return;
   const cutoff = Date.now() - ms;
   _db.run('DELETE FROM sessions WHERE timestamp < ?', [cutoff]);
-  save();
+  _scheduleSave();
 }
 
 // ── Config Object (backward compat) ──────────────
@@ -389,6 +391,22 @@ function migrateFromJson(configJsonPath) {
 
 // ── Persistence ──────────────────────────────────
 
+function _scheduleSave() {
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    _saveTimer = null;
+    save();
+  }, SAVE_DEBOUNCE_MS);
+}
+
+function flushSync() {
+  if (_saveTimer) {
+    clearTimeout(_saveTimer);
+    _saveTimer = null;
+    save();
+  }
+}
+
 function save() {
   if (!_db || !_dbPath) return;
   try {
@@ -402,7 +420,7 @@ function save() {
 
 function close() {
   if (_db) {
-    save();
+    flushSync();
     _db.close();
     _db = null;
   }
@@ -427,5 +445,6 @@ module.exports = {
   syncFromConfigObject,
   migrateFromJson,
   save,
+  flushSync,
   close,
 };

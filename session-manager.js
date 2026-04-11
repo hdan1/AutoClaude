@@ -6,6 +6,7 @@ const { TOOL_ACTIVITY_MAP, GSD_PHASE_PATTERNS, CRASH_RETRY_DELAY_MS, QUESTION_TI
 const AutonomyEngine = require('./lib/autonomy');
 const contextGuard = require('./lib/context-guard');
 const logger = require('./lib/logger');
+const { extractQuestions } = require('./lib/question-utils');
 
 class SessionManager extends EventEmitter {
   constructor(globalConfig, sendFn, workflowManager) {
@@ -424,6 +425,16 @@ class SessionManager extends EventEmitter {
   sendResponse(tabId, text) {
     const session = this.sessions.get(tabId);
     if (!session || !session.proxy) return;
+
+    // SDK mode: send control response directly instead of kill/restart
+    if (session.proxy.sdkMode && session._lastQuestionData?.toolUseId) {
+      const decision = (text && /^(y|yes|allow|approve)/i.test(text.trim())) ? 'allow' : 'deny';
+      session.proxy.sendControlResponse(session._lastQuestionData.toolUseId, decision);
+      session.state.message = 'Continuing with response...';
+      this.sendState(tabId);
+      return;
+    }
+
     session.proxy.sendResponse(text);
     session.state.message = 'Continuing with response...';
     this.sendState(tabId);
@@ -470,7 +481,14 @@ class SessionManager extends EventEmitter {
       }
       this.send(tabId, 'proxy-event', e);
     });
-    proxy.on('hook-event', e => this.send(tabId, 'hook-event', e));
+    proxy.on('hook-event', e => {
+      this.send(tabId, 'hook-event', e);
+      // A3: Forward notifications to Telegram
+      if (e.event === 'Notification' && session.telegramBridge?.isRunning) {
+        const msg = e.title || e.message || 'Notification from Claude';
+        session.telegramBridge.broadcastDirect(`🔔 ${msg}`);
+      }
+    });
     proxy.on('redundant-reads', e => {
       this.send(tabId, 'log', { type: 'system', text: `\u26a0 ${e.fileName} read ${e.count}x in this session (token waste)` });
       this.send(tabId, 'redundant-reads', e);
@@ -522,7 +540,7 @@ class SessionManager extends EventEmitter {
       if (typeof questionData === 'string') {
         questionText = questionData;
       } else if (questionData) {
-        const qList = questionData.questions || (questionData.question ? [questionData] : []);
+        const qList = extractQuestions(questionData);
         if (qList.length > 0) {
           const q = qList[0];
           questionText = q.question || null;
@@ -672,6 +690,27 @@ class SessionManager extends EventEmitter {
       session.waitingForAnswer = false;
       if (session.answerResolve) { session.answerResolve(); session.answerResolve = null; }
     });
+
+    // SDK mode: handle control requests (permission prompts)
+    proxy.on('control-request', (request) => {
+      const decision = this.autonomy.evaluatePermission(request, this.config);
+      if (decision.action === 'allow') {
+        proxy.sendControlResponse(request.toolUseId, 'allow');
+        this.send(tabId, 'log', { type: 'system', text: `✅ Auto-approved: ${request.toolName} (${decision.reason})` });
+      } else if (decision.action === 'deny') {
+        proxy.sendControlResponse(request.toolUseId, 'deny');
+        this.send(tabId, 'log', { type: 'system', text: `❌ Denied: ${request.toolName} (${decision.reason})` });
+      } else {
+        // Route to user/telegram for manual decision
+        this.send(tabId, 'permission-request', { tabId, ...request });
+      }
+    });
+
+    // SDK mode: handle session state events
+    proxy.on('session-state', (state) => {
+      session.state.sessionState = state;
+      this.send(tabId, 'session-state', { tabId, state });
+    });
   }
 
   // Check if auto-claude hooks are still present in target project settings.
@@ -692,18 +731,21 @@ class SessionManager extends EventEmitter {
       if (!hasPost || !hasSub) {
         this.emit('reinstall-hooks', projectDir);
       }
-    } catch { /* silent — installHooks will handle errors */ }
+    } catch (e) { logger.debug('session-manager', `hook verification failed: ${e.message}`); }
   }
 
   _waitForAnswerWithTimeout(session, timeoutMs) {
+    // B5: Clear any existing timer before setting a new resolve to prevent orphaned promises
+    if (session._answerTimer) clearTimeout(session._answerTimer);
     return new Promise(resolve => {
-      let timer = null;
       session.answerResolve = () => {
-        if (timer) clearTimeout(timer);
+        if (session._answerTimer) clearTimeout(session._answerTimer);
+        session._answerTimer = null;
         resolve(true);
       };
-      timer = setTimeout(() => {
+      session._answerTimer = setTimeout(() => {
         session.answerResolve = null;
+        session._answerTimer = null;
         resolve(false);
       }, timeoutMs);
     });
@@ -713,8 +755,9 @@ class SessionManager extends EventEmitter {
     const dir = session.state.projectDir;
     if (!dir) return;
     if (!this.config.sessions) this.config.sessions = {};
-    this.config.sessions[dir] = {
-      ...(this.config.sessions[dir] || {}),
+    // R5: Include tabId in key to prevent last-write-wins between concurrent sessions
+    const key = `${dir}::${tabId}`;
+    this.config.sessions[key] = {
       sessionId: session.state.sessionId,
       timestamp: new Date().toISOString(),
       wasRunning: true,
@@ -726,8 +769,9 @@ class SessionManager extends EventEmitter {
 
   _clearResumeState(tabId, session) {
     const dir = session.state.projectDir;
-    if (!dir || !this.config.sessions?.[dir]) return;
-    this.config.sessions[dir].wasRunning = false;
+    if (!dir) return;
+    const key = `${dir}::${tabId}`;
+    if (this.config.sessions) delete this.config.sessions[key];
     this.emit('save-config');
   }
 
@@ -777,7 +821,9 @@ class SessionManager extends EventEmitter {
         lastUpdated: new Date().toISOString(),
       };
       fs.writeFileSync(this._statsFile(dir), JSON.stringify(data, null, 2), 'utf8');
-    } catch { /* silent */ }
+    } catch (e) {
+      logger.warn('session-manager', `Stats save failed: ${e.message}`);
+    }
   }
 }
 

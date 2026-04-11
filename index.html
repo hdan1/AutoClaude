@@ -102,6 +102,10 @@ body{margin:0;background:var(--bg);color:var(--tx);font-family:Segoe UI,system-u
 .ll.tool{color:var(--cyn)}
 .ll.toolerr{color:var(--pnk)}
 .ll.sub{color:var(--vio)}
+.state-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.state-idle { background: var(--tx3); }
+.state-running { background: var(--grn); }
+.state-requires_action { background: var(--ylw); }
 .ll.usr{color:var(--grn);font-weight:600}
 .gsd-banner{display:inline-block;padding:2px 6px;border-radius:10px;background:rgba(88,166,255,.15);color:var(--acc);font-size:11px;margin-right:6px}
 .skill-banner{display:inline-block;padding:2px 6px;border-radius:10px;background:rgba(180,142,173,.15);color:var(--skill);font-size:11px;margin-left:4px}
@@ -780,6 +784,8 @@ async function closeTab(tabId){
     await window.api.stopSession(tabId);
   }
   if(ts.eTmr)clearInterval(ts.eTmr);
+  if(ts._countdownTimer)clearInterval(ts._countdownTimer);
+  if(ts.activityDebounceTimer)clearTimeout(ts.activityDebounceTimer);
   tabs.delete(tabId);
   document.querySelector(`.t[data-tab-id="${tabId}"]`)?.remove();
   document.querySelector(`.tp[data-tab-id="${tabId}"]`)?.remove();
@@ -877,7 +883,7 @@ function wirePanel(tabId){
     if(!r?.ok){showTgTabStatus(r?.error||'Discovery failed','err');return}
     if(!r.chats||!r.chats.length){showTgTabStatus('No /start messages found. Send /start to your bot first.','err');return}
     tgTabChatList.style.display='block';tgTabChatList.innerHTML='';
-    for(const c of r.chats){const d=document.createElement('div');d.className='tutor-chat-item';d.innerHTML=`<b>${c.username||c.firstName||'?'}</b> (ID: ${c.chatId})`;tgTabChatList.appendChild(d)}
+    for(const c of r.chats){const d=document.createElement('div');d.className='tutor-chat-item';d.innerHTML=`<b>${esc(c.username||c.firstName||'?')}</b> (ID: ${esc(String(c.chatId))})`;tgTabChatList.appendChild(d)}
     showTgTabStatus(`Found ${r.chats.length} chat(s)`,'ok');
   };
   function showTgTabStatus(msg,cls){tgTabStatus.textContent=msg;tgTabStatus.className='tg-status '+(cls||'');tgTabStatus.style.display='block';if(cls==='ok')setTimeout(()=>{tgTabStatus.style.display='none'},3000)}
@@ -1233,6 +1239,18 @@ window.api.onProxyEvent(handleProxyEvent);
 function handleHookEvent(d){const tabId=d.tabId||'default';const ts=tabs.get(tabId);if(!ts)return;ensurePanelsForTab(tabId);const isSubagent=!!d.agentId;ts.totalSubTools+=isSubagent?1:0;ts.toolTimeline.push({time:d.ts||Date.now(),name:d.tool||'unknown',input:(d.input||'').substring(0,60),isSubagent});const cSub=$t(tabId,'cToolsSub');if(cSub)cSub.textContent=`${ts.totalTools-ts.totalSubTools} main · ${ts.totalSubTools} subagent`;if(isSubagent)addLogForTab(tabId,'sub',`  🔗 [subagent] ${d.tool}  ${d.input||''}`)}
 window.api.onHookEvent(handleHookEvent);
 window.api.onRedundantReads(d=>{const tabId=d.tabId||'default';const ts=tabs.get(tabId);if(!ts)return;if(!ts._redundantReads)ts._redundantReads={};ts._redundantReads[d.filePath]=d.count;addLogForTab(tabId,'auto',`\u26a0 Token waste: ${d.fileName} read ${d.count}x this session`)});
+window.api.onSessionState?.((data) => {
+  const tab = document.querySelector(`.t[data-tab-id="${data.tabId}"]`);
+  if (!tab) return;
+  let dot = tab.querySelector('.state-dot');
+  if (!dot) {
+    dot = document.createElement('span');
+    dot.className = 'state-dot';
+    tab.prepend(dot);
+  }
+  dot.className = 'state-dot state-' + data.state;
+  dot.title = data.state;
+});
 function handleLog(d){const tabId=d.tabId||'default';ensurePanelsForTab(tabId);const cls=d.type==='stderr'?'err':d.type==='system'?'sys':d.type==='user-input'?'usr':d.type==='auto-answer'?'auto':'';addLogForTab(tabId,cls,d.text)}
 window.api.onLog(handleLog);
 window.api.onBatch(items=>{for(const item of items){if(item.ch==='log')handleLog(item);else if(item.ch==='proxy-event')handleProxyEvent(item);else if(item.ch==='hook-event')handleHookEvent(item);else if(item.ch==='metrics')handleMetrics(item)}});
