@@ -798,6 +798,7 @@ app.on('window-all-closed', () => {
   }
 });
 app.on('before-quit', () => { isQuitting = true; cleanup(); });
+process.on('exit', () => { settingsDb?.flushSync(); });
 process.on('uncaughtException', (err) => {
   logger.error('app', 'Uncaught exception', err);
   cleanup();
