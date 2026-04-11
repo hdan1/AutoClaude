@@ -3,6 +3,7 @@ const EventEmitter = require('events');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const logger = require('./lib/logger');
 const claudeDetector = require('./lib/claude-detector');
 const summarize = require('./lib/summarize');
 const { runPtyCommand, classifyPtyRun, normalizePtyError } = require('./lib/pty-executor');
@@ -414,10 +415,13 @@ class ClaudeProxy extends EventEmitter {
           const all = fs.readFileSync(logFile, 'utf8');
           const lines = all.split('\n').filter(l => l.trim());
           const keep = lines.slice(Math.floor(lines.length / 2));
-          fs.writeFileSync(logFile, keep.join('\n') + '\n');
+          // R4: Atomic truncation — write to temp, rename over original
+          const tmpFile = logFile + '.tmp';
+          fs.writeFileSync(tmpFile, keep.join('\n') + '\n');
+          fs.renameSync(tmpFile, logFile);
           this.hookByteOffset = fs.statSync(logFile).size;
-          return; // Skip this poll cycle; next poll picks up normally
-        } catch { /* silent */ }
+          return;
+        } catch (e) { logger.debug('proxy', `hook log truncation failed: ${e.message}`); }
       }
 
       // Read only new bytes
