@@ -431,8 +431,8 @@ function syncCustomProviderRuntimeEnv() {
   return { baseUrl, hasSecureToken: !!secureToken };
 }
 
-function detectClaudeStateWithSecureToken() {
-  const detection = claudeDetector.detect();
+async function detectClaudeStateWithSecureToken() {
+  const detection = await claudeDetector.detect();
   const runtime = syncCustomProviderRuntimeEnv();
 
   return enrichDetectionWithCustomProviderSecret({
@@ -442,9 +442,9 @@ function detectClaudeStateWithSecureToken() {
   });
 }
 
-function buildHealthStatus() {
-  const detection = detectClaudeStateWithSecureToken();
-  const prerequisites = claudeDetector.detectPrerequisites();
+async function buildHealthStatus() {
+  const detection = await detectClaudeStateWithSecureToken();
+  const prerequisites = await claudeDetector.detectPrerequisites();
   const pluginData = detection.installed ? claudeDetector.listPlugins() : { installed: [] };
 
   let recommended = [];
@@ -556,9 +556,9 @@ app.whenReady().then(async () => {
   createWindow();
 
   // ── Startup Health Check ──────────────────────────
-  setTimeout(() => {
+  setTimeout(async () => {
     try {
-      const status = buildHealthStatus();
+      const status = await buildHealthStatus();
       if (!status.healthy) send('health-check', status);
     } catch (err) {
       logger.warn('startup', `Health check failed: ${err.message}`);
@@ -1773,9 +1773,9 @@ ipcMain.handle('check-claude-update', (event, opts) => {
 });
 
 // ── Startup Health Check ─────────────────────────
-ipcMain.handle('run-health-check', (event) => {
+ipcMain.handle('run-health-check', async (event) => {
   if (!isTrustedIpcEvent(event, 'run-health-check')) return { healthy: false, error: 'Untrusted IPC sender' };
-  try { return buildHealthStatus(); }
+  try { return await buildHealthStatus(); }
   catch (e) { return { healthy: false, error: e.message }; }
 });
 
@@ -1807,10 +1807,10 @@ ipcMain.handle('open-app-log-folder', async (event) => {
   }
 });
 
-ipcMain.handle('snapshot-recommended-plugins', (event) => {
+ipcMain.handle('snapshot-recommended-plugins', async (event) => {
   if (!isTrustedIpcEvent(event, 'snapshot-recommended-plugins')) return [];
   try {
-    const detection = claudeDetector.detect();
+    const detection = await claudeDetector.detect();
     if (!detection.installed) return [];
     const pluginData = claudeDetector.listPlugins();
     const enabled = pluginData.installed.filter(p => p.enabled);

@@ -98,7 +98,7 @@ class ClaudeProxy extends EventEmitter {
 
   _execute(projectDir, options) {
     this._lastProjectDir = projectDir;
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       const result = {
         startTime: Date.now(),
         firstTokenTime: null,
@@ -157,7 +157,7 @@ class ClaudeProxy extends EventEmitter {
       // piped input; sendResponse() reopens the write channel when needed.
       // Resolve claude binary path — packaged Electron apps may not have
       // ~/.local/bin on PATH, so use the absolute path when available.
-      const detection = claudeDetector.detect();
+      const detection = await claudeDetector.detect();
       const claudeBin = (detection.path && detection.path !== 'claude') ? detection.path : 'claude';
       // Extend PATH with common install dirs so claude can find its deps
       const extraPaths = [
