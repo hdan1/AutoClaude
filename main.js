@@ -101,29 +101,40 @@ const APP_LOG_FILE = getAppLogFilePath(app.getPath('userData'));
 logger.setLogFile(APP_LOG_FILE);
 
 
-// ── PID Tracking (PERF-04) ────────────────────────
+// ── PID Tracking (R1: in-memory map, debounced flush) ────────
+const activePids = new Map(); // tabId -> pid
+let pidFlushTimer = null;
 let PID_FILE = null;
+
 function getPidFile() {
   if (!PID_FILE) PID_FILE = path.join(app.getPath('userData'), 'auto-claude-pids.json');
   return PID_FILE;
 }
 
-function trackPid(tabId, pid) {
+function _flushPids() {
   try {
-    let pids = {};
-    try { pids = JSON.parse(fs.readFileSync(getPidFile(), 'utf8')); } catch { /* no file yet */ }
-    pids[tabId] = pid;
-    fs.writeFileSync(getPidFile(), JSON.stringify(pids), 'utf8');
-  } catch { /* silent */ }
+    const obj = {};
+    for (const [tabId, pid] of activePids) obj[tabId] = pid;
+    fs.writeFileSync(getPidFile(), JSON.stringify(obj), 'utf8');
+  } catch (e) { logger.debug('pid-tracking', `flush failed: ${e.message}`); }
+}
+
+function _schedulePidFlush() {
+  if (pidFlushTimer) return;
+  pidFlushTimer = setTimeout(() => {
+    pidFlushTimer = null;
+    _flushPids();
+  }, 500);
+}
+
+function trackPid(tabId, pid) {
+  activePids.set(tabId, pid);
+  _schedulePidFlush();
 }
 
 function untrackPid(tabId) {
-  try {
-    let pids = {};
-    try { pids = JSON.parse(fs.readFileSync(getPidFile(), 'utf8')); } catch { return; }
-    delete pids[tabId];
-    fs.writeFileSync(getPidFile(), JSON.stringify(pids), 'utf8');
-  } catch { /* silent */ }
+  activePids.delete(tabId);
+  _schedulePidFlush();
 }
 
 function killOrphans() {
