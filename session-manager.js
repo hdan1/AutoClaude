@@ -481,7 +481,14 @@ class SessionManager extends EventEmitter {
       }
       this.send(tabId, 'proxy-event', e);
     });
-    proxy.on('hook-event', e => this.send(tabId, 'hook-event', e));
+    proxy.on('hook-event', e => {
+      this.send(tabId, 'hook-event', e);
+      // A3: Forward notifications to Telegram
+      if (e.event === 'Notification' && session.telegramBridge?.isRunning) {
+        const msg = e.title || e.message || 'Notification from Claude';
+        session.telegramBridge.broadcastDirect(`🔔 ${msg}`);
+      }
+    });
     proxy.on('redundant-reads', e => {
       this.send(tabId, 'log', { type: 'system', text: `\u26a0 ${e.fileName} read ${e.count}x in this session (token waste)` });
       this.send(tabId, 'redundant-reads', e);

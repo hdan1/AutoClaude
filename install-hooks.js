@@ -50,7 +50,7 @@ try {
 
   if (uninstall) {
     // Remove our hooks
-    for (const event of ['PostToolUse', 'SubagentStop']) {
+    for (const event of ['PostToolUse', 'SubagentStop', 'Notification']) {
       if (Array.isArray(settings.hooks[event])) {
         settings.hooks[event] = settings.hooks[event].filter(
           h => { const s = JSON.stringify(h); return !s.includes(MARKER) && !s.includes(OLD_MARKER); }
@@ -61,7 +61,7 @@ try {
     console.log('Removed auto-claude hooks from', settingsFile);
   } else {
     // Add our hooks (if not already present)
-    for (const event of ['PostToolUse', 'SubagentStop']) {
+    for (const event of ['PostToolUse', 'SubagentStop', 'Notification']) {
       if (!Array.isArray(settings.hooks[event])) settings.hooks[event] = [];
 
       // Check if already installed (new or old marker)
