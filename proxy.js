@@ -400,11 +400,11 @@ class ClaudeProxy extends EventEmitter {
     }, HOOK_POLL_INTERVAL_MS);
   }
 
-  // M1: Read only new bytes from hook log using byte offset
-  _readHookLog(logFile, result) {
+  // M1: Read only new bytes from hook log using byte offset (async I/O)
+  async _readHookLog(logFile, result) {
     try {
-      if (!fs.existsSync(logFile)) return;
-      const stat = fs.statSync(logFile);
+      let stat;
+      try { stat = await fs.promises.stat(logFile); } catch { return; }
       if (stat.size < this.hookByteOffset) { this.hookByteOffset = 0; }
       if (stat.size === this.hookByteOffset) return; // No new data
 
@@ -412,14 +412,15 @@ class ClaudeProxy extends EventEmitter {
       const maxBytes = ((this.config.hooks?.maxLogSizeMB || 5) * 1024 * 1024) || MAX_HOOK_LOG_BYTES;
       if (stat.size > maxBytes) {
         try {
-          const all = fs.readFileSync(logFile, 'utf8');
+          const all = await fs.promises.readFile(logFile, 'utf8');
           const lines = all.split('\n').filter(l => l.trim());
           const keep = lines.slice(Math.floor(lines.length / 2));
           // R4: Atomic truncation — write to temp, rename over original
           const tmpFile = logFile + '.tmp';
-          fs.writeFileSync(tmpFile, keep.join('\n') + '\n');
-          fs.renameSync(tmpFile, logFile);
-          this.hookByteOffset = fs.statSync(logFile).size;
+          await fs.promises.writeFile(tmpFile, keep.join('\n') + '\n');
+          await fs.promises.rename(tmpFile, logFile);
+          const newStat = await fs.promises.stat(logFile);
+          this.hookByteOffset = newStat.size;
           return;
         } catch (e) { logger.debug('proxy', `hook log truncation failed: ${e.message}`); }
       }
@@ -427,11 +428,11 @@ class ClaudeProxy extends EventEmitter {
       // Read only new bytes
       const newBytes = stat.size - this.hookByteOffset;
       const buf = Buffer.alloc(newBytes);
-      const fd = fs.openSync(logFile, 'r');
+      const fh = await fs.promises.open(logFile, 'r');
       try {
-        fs.readSync(fd, buf, 0, newBytes, this.hookByteOffset);
+        await fh.read(buf, 0, newBytes, this.hookByteOffset);
       } finally {
-        fs.closeSync(fd);
+        await fh.close();
       }
 
       this.hookByteOffset = stat.size;
@@ -452,9 +453,9 @@ class ClaudeProxy extends EventEmitter {
     } catch (err) { logger.debug('proxy', `hook log read failed: ${err.message}`); }
   }
 
-  _flushHookLog(projectDir, result) {
+  async _flushHookLog(projectDir, result) {
     const logFile = path.join(projectDir, this.config.hooks?.logFile || '.planning/auto-claude-hooks.jsonl');
-    this._readHookLog(logFile, result);
+    await this._readHookLog(logFile, result);
   }
 
   // Detect when the same file is read 3+ times in one session (token waste signal)
@@ -500,18 +501,21 @@ class ClaudeProxy extends EventEmitter {
     }, HOOK_POLL_INTERVAL_MS);
   }
 
-  _readWorktreeHookLog(logFile, result) {
+  async _readWorktreeHookLog(logFile, result) {
     try {
-      if (!fs.existsSync(logFile)) return;
-      const stat = fs.statSync(logFile);
+      let stat;
+      try { stat = await fs.promises.stat(logFile); } catch { return; }
       if (stat.size < this.worktreeHookByteOffset) { this.worktreeHookByteOffset = 0; }
       if (stat.size === this.worktreeHookByteOffset) return;
 
-      const fd = fs.openSync(logFile, 'r');
       const newBytes = stat.size - this.worktreeHookByteOffset;
       const buf = Buffer.alloc(newBytes);
-      fs.readSync(fd, buf, 0, newBytes, this.worktreeHookByteOffset);
-      fs.closeSync(fd);
+      const fh = await fs.promises.open(logFile, 'r');
+      try {
+        await fh.read(buf, 0, newBytes, this.worktreeHookByteOffset);
+      } finally {
+        await fh.close();
+      }
       this.worktreeHookByteOffset = stat.size;
 
       const lines = buf.toString('utf8').split('\n').filter(l => l.trim());
