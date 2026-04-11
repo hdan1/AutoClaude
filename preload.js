@@ -8,7 +8,7 @@ function safeOn(channel, callback) {
 
 contextBridge.exposeInMainWorld('api', {
   // -- Session API (all accept tabId as first param) --
-  startSession:     (tabId, c) => ipcRenderer.send('start-session', { tabId, ...c }),
+  startSession:     (tabId, c) => ipcRenderer.invoke('start-session', { tabId, ...c }),
   stopSession:      (tabId) => ipcRenderer.invoke('stop-session', { tabId }),
   listSessions:     d => ipcRenderer.invoke('list-sessions', d),
   getStoredSession: d => ipcRenderer.invoke('get-stored-session', d),

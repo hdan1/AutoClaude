@@ -296,7 +296,9 @@ function _wireSessionManagerEvents() {
 }
 
 // ── Batch Queue Runner ─────────────────────────────
+let batchProcessing = false;
 function processBatchQueue() {
+  if (batchProcessing) return;
   if (!sessionManager) return;
   if (!config.batch?.enabled || !config.batch.queue?.length) return;
 
@@ -304,9 +306,11 @@ function processBatchQueue() {
   const limit = config.batch.mode === 'parallel' ? (config.batch.parallelLimit || 2) : 1;
   if (running >= limit) return;
 
+  batchProcessing = true;
   const item = config.batch.queue.shift();
-  if (!item) return;
+  if (!item) { batchProcessing = false; return; }
   saveConfig(config);
+  batchProcessing = false;
 
   const projectPath = path.join(config.workspaceRoot || '', item.project);
   if (!fs.existsSync(projectPath)) {
@@ -901,16 +905,17 @@ ipcMain.on('restart-for-update', (event) => {
 });
 
 // ── Session IPC ───────────────────────────────────
-ipcMain.on('start-session', async (event, o) => {
+ipcMain.handle('start-session', async (event, o) => {
   if (!isTrustedIpcEvent(event, 'start-session')) return;
   const tabId = o.tabId || 'default';
   const existing = sessionManager.get(tabId);
-  if (existing?.state.running) return;
+  if (existing?.state.running || existing?.state.starting) return;
+  if (existing) existing.state.starting = true;
 
   const dirVal = validateProjectDir(o.projectDir);
-  if (!dirVal.valid) { sendToTab(tabId, 'error', { message: dirVal.error }); return; }
+  if (!dirVal.valid) { if (existing) existing.state.starting = false; sendToTab(tabId, 'error', { message: dirVal.error }); return; }
   const promptVal = validatePrompt(o.prompt);
-  if (!promptVal.valid) { sendToTab(tabId, 'error', { message: promptVal.error }); return; }
+  if (!promptVal.valid) { if (existing) existing.state.starting = false; sendToTab(tabId, 'error', { message: promptVal.error }); return; }
 
   saveConfig(config);
 
@@ -939,6 +944,7 @@ ipcMain.on('start-session', async (event, o) => {
         installHooks(dirVal.path);
         existing.state.hooksInstalled = true;
       }
+      existing.state.starting = false;
       sessionManager.start(tabId, promptVal.prompt);
       acquireSleepLock();
       return;
@@ -962,6 +968,7 @@ ipcMain.on('start-session', async (event, o) => {
     installHooks(dirVal.path);
     session.state.hooksInstalled = true;
   }
+  session.state.starting = false;
   sessionManager.start(tabId, promptVal.prompt);
   acquireSleepLock();
 });
