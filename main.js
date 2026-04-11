@@ -16,6 +16,7 @@ const { WorkflowManager } = require('./lib/workflow-detector');
 const GsdDetector = require('./lib/gsd-detector');
 const SuperpowersDetector = require('./lib/superpowers-detector');
 const claudeDetector = require('./lib/claude-detector');
+const { withTrustedIpc } = require('./lib/ipc-trust');
 const claudeInstaller = require('./lib/claude-installer');
 const {
   computeHealthStatus,
@@ -167,6 +168,8 @@ function isTrustedIpcEvent(event, action) {
   const rejection = rejectUntrustedIpc(event, action);
   return !rejection;
 }
+
+const trustDeps = { isTrusted: isTrustedIpcEvent };
 
 // ── IPC Batching ─────────────────────────────────
 const BATCH_SET = new Set(IPC_BATCH_CHANNELS);
@@ -877,11 +880,10 @@ ipcMain.handle('select-directory', async (event, opts = {}) => {
 
   return scoped ? { ok: true, path: selected } : selected;
 });
-ipcMain.handle('load-config', (event) => {
-  if (!isTrustedIpcEvent(event, 'load-config')) return {};
+ipcMain.handle('load-config', withTrustedIpc('load-config', (event) => {
   config = settingsDb.buildConfigObject(config);
   return config;
-});
+}, trustDeps));
 ipcMain.handle('show-confirm-dialog', async (event, opts) => {
   if (!isTrustedIpcEvent(event, 'show-confirm-dialog')) return 1;
   const r = await dialog.showMessageBox(mainWindow, {
@@ -1098,10 +1100,9 @@ ipcMain.on('save-config', (event, c) => {
 });
 
 // ── Settings DB IPC ──────────────────────────────
-ipcMain.handle('get-setting', (event, key) => {
-  if (!isTrustedIpcEvent(event, 'get-setting')) return null;
+ipcMain.handle('get-setting', withTrustedIpc('get-setting', (event, key) => {
   return settingsDb.get(key);
-});
+}, trustDeps));
 
 ipcMain.handle('set-setting', (event, { key, value }) => {
   if (!isTrustedIpcEvent(event, 'set-setting')) return { ok: false, error: 'Untrusted IPC sender' };
@@ -1110,15 +1111,13 @@ ipcMain.handle('set-setting', (event, { key, value }) => {
   return { ok: true };
 });
 
-ipcMain.handle('get-settings-group', (event, category) => {
-  if (!isTrustedIpcEvent(event, 'get-settings-group')) return {};
+ipcMain.handle('get-settings-group', withTrustedIpc('get-settings-group', (event, category) => {
   return settingsDb.getGroup(category);
-});
+}, trustDeps));
 
-ipcMain.handle('get-settings-schema', (event) => {
-  if (!isTrustedIpcEvent(event, 'get-settings-schema')) return { schema: {}, categories: [] };
+ipcMain.handle('get-settings-schema', withTrustedIpc('get-settings-schema', (event) => {
   return { schema: settingsDb.SETTINGS_SCHEMA, categories: settingsDb.CATEGORY_ORDER };
-});
+}, trustDeps));
 
 ipcMain.handle('fetch-models', async (event) => {
   if (!isTrustedIpcEvent(event, 'fetch-models')) return { ok: false, error: 'Untrusted IPC sender' };
@@ -1746,10 +1745,9 @@ ipcMain.handle('get-custom-provider-state', (event) => {
   };
 });
 
-ipcMain.handle('list-settings-tags', (event) => {
-  if (!isTrustedIpcEvent(event, 'list-settings-tags')) return { tags: [] };
+ipcMain.handle('list-settings-tags', withTrustedIpc('list-settings-tags', (event) => {
   return claudeDetector.listSettingsTags();
-});
+}, trustDeps));
 
 ipcMain.handle('load-settings-tag', (event, { name }) => {
   if (!isTrustedIpcEvent(event, 'load-settings-tag')) return { ok: false, error: 'Untrusted IPC sender' };
