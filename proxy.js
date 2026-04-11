@@ -421,11 +421,14 @@ class ClaudeProxy extends EventEmitter {
       }
 
       // Read only new bytes
-      const fd = fs.openSync(logFile, 'r');
       const newBytes = stat.size - this.hookByteOffset;
       const buf = Buffer.alloc(newBytes);
-      fs.readSync(fd, buf, 0, newBytes, this.hookByteOffset);
-      fs.closeSync(fd);
+      const fd = fs.openSync(logFile, 'r');
+      try {
+        fs.readSync(fd, buf, 0, newBytes, this.hookByteOffset);
+      } finally {
+        fs.closeSync(fd);
+      }
 
       this.hookByteOffset = stat.size;
 
