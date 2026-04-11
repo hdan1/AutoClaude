@@ -6,6 +6,7 @@ const { TOOL_ACTIVITY_MAP, GSD_PHASE_PATTERNS, CRASH_RETRY_DELAY_MS, QUESTION_TI
 const AutonomyEngine = require('./lib/autonomy');
 const contextGuard = require('./lib/context-guard');
 const logger = require('./lib/logger');
+const { extractQuestions } = require('./lib/question-utils');
 
 class SessionManager extends EventEmitter {
   constructor(globalConfig, sendFn, workflowManager) {
@@ -522,7 +523,7 @@ class SessionManager extends EventEmitter {
       if (typeof questionData === 'string') {
         questionText = questionData;
       } else if (questionData) {
-        const qList = questionData.questions || (questionData.question ? [questionData] : []);
+        const qList = extractQuestions(questionData);
         if (qList.length > 0) {
           const q = qList[0];
           questionText = q.question || null;
