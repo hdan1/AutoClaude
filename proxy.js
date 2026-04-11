@@ -49,29 +49,39 @@ class ClaudeProxy extends EventEmitter {
     return new Promise((resolve) => {
       this.aborted = true;
       this._stopHookWatcher();
-      if (this._keepAliveTimer) {
-        clearInterval(this._keepAliveTimer);
-        this._keepAliveTimer = null;
-      }
+      if (this._keepAliveTimer) { clearInterval(this._keepAliveTimer); this._keepAliveTimer = null; }
       if (!this.process) { resolve(); return; }
       const pid = this.process.pid;
       const proc = this.process;
       this.process = null;
 
-      const timeout = setTimeout(() => resolve(), 5000);
+      const timeout = setTimeout(() => {
+        // A1: Escalate to SIGKILL after 3s if still alive
+        try {
+          if (os.platform() === 'win32' && pid) {
+            execFile('taskkill', ['/F', '/T', '/PID', String(pid)],
+              { timeout: 3000, windowsHide: true }, () => {});
+          } else if (pid) {
+            process.kill(pid, 'SIGKILL');
+          }
+        } catch { /* already dead */ }
+        setTimeout(resolve, 500); // Give OS time to clean up
+      }, 3000);
+
       proc.on('close', () => { clearTimeout(timeout); resolve(); });
 
       try {
-        // On Windows, SIGTERM only kills the parent shell, not child processes.
-        // Use async execFile with taskkill /T to kill the entire process tree
-        // without blocking the main process (PERF-04).
         if (os.platform() === 'win32' && pid) {
-          execFile('taskkill', ['/T', '/PID', String(pid), '/F'],
+          execFile('taskkill', ['/T', '/PID', String(pid)],
             { timeout: 5000, windowsHide: true }, () => {});
         } else {
           proc.kill('SIGTERM');
         }
-      } catch (e) { logger.debug('proxy', `kill failed for PID ${pid}: ${e.message}`); resolve(); }
+      } catch (e) {
+        logger.debug('proxy', `kill failed for PID ${pid}: ${e.message}`);
+        clearTimeout(timeout);
+        resolve();
+      }
     });
   }
 
