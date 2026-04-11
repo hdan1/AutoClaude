@@ -19,6 +19,10 @@ const {
   RING_BUFFER_TOOL_CALLS,
   QUESTION_TOOL_NAMES,
   MAX_HOOK_LOG_BYTES,
+  SDK_MIN_VERSION,
+  SDK_KEEPALIVE_INTERVAL_MS,
+  SDK_INPUT_FORMAT,
+  SDK_OUTPUT_FORMAT,
 } = require('./lib/constants');
 
 class ClaudeProxy extends EventEmitter {
@@ -33,6 +37,8 @@ class ClaudeProxy extends EventEmitter {
     this.worktreeHookByteOffset = 0;
     this.worktreeDir = null;
     this._readCounts = new Map(); // Track file read counts for redundancy detection
+    this.sdkMode = false; // set in _execute
+    this._keepAliveTimer = null;
   }
 
   run(projectDir, options) {
@@ -43,6 +49,10 @@ class ClaudeProxy extends EventEmitter {
     return new Promise((resolve) => {
       this.aborted = true;
       this._stopHookWatcher();
+      if (this._keepAliveTimer) {
+        clearInterval(this._keepAliveTimer);
+        this._keepAliveTimer = null;
+      }
       if (!this.process) { resolve(); return; }
       const pid = this.process.pid;
       const proc = this.process;
@@ -98,68 +108,69 @@ class ClaudeProxy extends EventEmitter {
 
   _execute(projectDir, options) {
     this._lastProjectDir = projectDir;
+    const result = {
+      startTime: Date.now(),
+      firstTokenTime: null,
+      endTime: null,
+      ttft: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreateTokens: 0,
+      costUsd: 0,
+      numTurns: 0,
+      model: '',
+      sessionId: null,
+      timeline: [],
+      hookEvents: [],
+      toolCalls: [],
+      fullText: '',
+      resultText: null,
+      error: null,
+      exitCode: null,
+    };
+
+    // Start watching the hook log for subagent activity
+    this._startHookWatcher(projectDir, result);
+
+    const plan = ClaudeProxy._resolveExecutionPlan(options, this.config);
+    this.emit('event', { type: 'execution-mode', mode: plan.mode, reason: plan.reason, prompt: plan.originalPrompt });
+
+    if (plan.mode === 'pty-fallback') {
+      return (async () => {
+        try {
+          const raw = await runPtyCommand({
+            cwd: projectDir,
+            prompt: plan.originalPrompt,
+            timeoutMs: plan.timeoutMs,
+            skipPermissions: this.config.skipPermissions !== false,
+          });
+          const classified = classifyPtyRun(raw);
+          ClaudeProxy._applyPtyFallbackResult(result, { ...classified, stdout: raw.stdout, stderr: raw.stderr });
+          this._mergeToolCalls(result);
+          return result;
+        } catch (err) {
+          result.error = normalizePtyError(err);
+          this._mergeToolCalls(result);
+          return result;
+        }
+      })();
+    }
+
+    this.sdkMode = this._supportsSDKMode();
+
+    if (this.sdkMode) {
+      return this._executeSDK(projectDir, options, plan, result);
+    }
+    return this._executePrintMode(projectDir, options, plan, result);
+  }
+
+  _executePrintMode(projectDir, options, plan, result) {
     return new Promise(async (resolve) => {
-      const result = {
-        startTime: Date.now(),
-        firstTokenTime: null,
-        endTime: null,
-        ttft: null,
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadTokens: 0,
-        cacheCreateTokens: 0,
-        costUsd: 0,
-        numTurns: 0,
-        model: '',
-        sessionId: null,
-        timeline: [],
-        hookEvents: [],
-        toolCalls: [],
-        fullText: '',
-        resultText: null,
-        error: null,
-        exitCode: null,
-      };
-
-      // Start watching the hook log for subagent activity
-      this._startHookWatcher(projectDir, result);
-
-      const plan = ClaudeProxy._resolveExecutionPlan(options, this.config);
-      this.emit('event', { type: 'execution-mode', mode: plan.mode, reason: plan.reason, prompt: plan.originalPrompt });
-
-      if (plan.mode === 'pty-fallback') {
-        (async () => {
-          try {
-            const raw = await runPtyCommand({
-              cwd: projectDir,
-              prompt: plan.originalPrompt,
-              timeoutMs: plan.timeoutMs,
-              skipPermissions: this.config.skipPermissions !== false,
-            });
-            const classified = classifyPtyRun(raw);
-            ClaudeProxy._applyPtyFallbackResult(result, { ...classified, stdout: raw.stdout, stderr: raw.stderr });
-            this._mergeToolCalls(result);
-            return resolve(result);
-          } catch (err) {
-            result.error = normalizePtyError(err);
-            this._mergeToolCalls(result);
-            return resolve(result);
-          }
-        })();
-        return;
-      }
-
-      // Build CLI args based on mode
       const args = plan.args;
 
-      // Stdin piped for sendResponse() but ended immediately to prevent
-      // Claude CLI's 3-second stdin wait warning. stdin.end() signals no
-      // piped input; sendResponse() reopens the write channel when needed.
-      // Resolve claude binary path — packaged Electron apps may not have
-      // ~/.local/bin on PATH, so use the absolute path when available.
       const detection = await claudeDetector.detect();
       const claudeBin = (detection.path && detection.path !== 'claude') ? detection.path : 'claude';
-      // Extend PATH with common install dirs so claude can find its deps
       const extraPaths = [
         path.join(os.homedir(), '.local', 'bin'),
         path.join(os.homedir(), '.claude', 'local'),
@@ -173,8 +184,6 @@ class ClaudeProxy extends EventEmitter {
         windowsHide: true,
       });
       // End stdin immediately to avoid "no stdin data received in 3s" warning.
-      // sendResponse() will still work because stdin.end() flushes but keeps
-      // the writable stream reference valid for future writes before close.
       this.process.stdin.end();
 
       let buffer = '';
@@ -195,7 +204,6 @@ class ClaudeProxy extends EventEmitter {
       });
 
       this.process.on('error', (err) => {
-        // L6: Graceful handling of claude CLI not found
         if (err.code === 'ENOENT') {
           result.error = 'Claude CLI not found. Please install it: npm install -g @anthropic-ai/claude-code';
           this.emit('process-error', result.error);
@@ -212,7 +220,81 @@ class ClaudeProxy extends EventEmitter {
         if (buffer.trim()) this._parseLine(buffer, result);
         if (result.firstTokenTime) result.ttft = result.firstTokenTime - result.startTime;
 
-        // M6: Give hooks a moment to flush, then read final state
+        setTimeout(() => {
+          this._flushHookLog(projectDir, result);
+          this._stopHookWatcher();
+          this._mergeToolCalls(result);
+          resolve(result);
+        }, PROCESS_CLOSE_FLUSH_MS);
+      });
+    });
+  }
+
+  _executeSDK(projectDir, options, plan, result) {
+    return new Promise(async (resolve) => {
+      const prompt = options?.prompt || '';
+      const args = ClaudeProxy._buildSDKModeArgs(prompt, options, this.config);
+
+      const detection = await claudeDetector.detect();
+      const claudeBin = (detection.path && detection.path !== 'claude') ? detection.path : 'claude';
+      const extraPaths = [
+        path.join(os.homedir(), '.local', 'bin'),
+        path.join(os.homedir(), '.claude', 'local'),
+      ];
+      const spawnEnv = { ...process.env };
+      spawnEnv.PATH = extraPaths.join(path.delimiter) + path.delimiter + (spawnEnv.PATH || '');
+      spawnEnv.CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS = 'true';
+
+      this.process = spawn(claudeBin, args, {
+        cwd: projectDir,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: spawnEnv,
+        windowsHide: true,
+      });
+      // SDK mode: keep stdin OPEN for bidirectional communication
+
+      // Start keepalive heartbeat
+      this._keepAliveTimer = setInterval(() => this.sendKeepAlive(), SDK_KEEPALIVE_INTERVAL_MS);
+
+      let buffer = '';
+
+      this.process.stdout.on('data', (chunk) => {
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (line.trim()) this._parseLine(line, result);
+        }
+      });
+
+      this.process.stderr.on('data', (chunk) => {
+        const text = chunk.toString();
+        this.emit('stderr', text);
+        if (this._isRetryable(text)) result.error = text.trim();
+      });
+
+      this.process.on('error', (err) => {
+        if (err.code === 'ENOENT') {
+          result.error = 'Claude CLI not found. Please install it: npm install -g @anthropic-ai/claude-code';
+          this.emit('process-error', result.error);
+        } else {
+          result.error = err.message;
+          this.emit('process-error', err.message);
+        }
+      });
+
+      this.process.on('close', (code) => {
+        // Clear keepalive timer
+        if (this._keepAliveTimer) {
+          clearInterval(this._keepAliveTimer);
+          this._keepAliveTimer = null;
+        }
+        this.process = null;
+        result.exitCode = code;
+        result.endTime = Date.now();
+        if (buffer.trim()) this._parseLine(buffer, result);
+        if (result.firstTokenTime) result.ttft = result.firstTokenTime - result.startTime;
+
         setTimeout(() => {
           this._flushHookLog(projectDir, result);
           this._stopHookWatcher();
@@ -237,6 +319,23 @@ class ClaudeProxy extends EventEmitter {
 
     const elapsed = Date.now() - result.startTime;
     const type = event.type;
+
+    // SDK mode: handle control requests (permission prompts)
+    if (type === 'control_request') {
+      this.emit('control-request', {
+        subtype: event.subtype,
+        toolName: event.tool_name,
+        input: event.input,
+        toolUseId: event.tool_use_id,
+      });
+      return;
+    }
+
+    // SDK mode: handle session state events
+    if (type === 'system' && event.subtype === 'session_state') {
+      this.emit('session-state', event.state);
+      return;
+    }
 
     if (type === 'system') {
       if (event.subtype === 'init' && event.session_id) {
@@ -713,6 +812,64 @@ class ClaudeProxy extends EventEmitter {
     // e.g. "/gsd:new-project args" -> "/gsd-new-project args"
     p = p.replace(/^\/([a-zA-Z0-9_-]+):([a-zA-Z0-9_-]+)/, '/$1-$2');
     return p;
+  }
+
+  // ── SDK Mode Detection ────────────────────────────
+
+  _supportsSDKMode() {
+    try {
+      const version = this.config._claudeVersion || '';
+      return this._compareVersions(version, SDK_MIN_VERSION) >= 0;
+    } catch { return false; }
+  }
+
+  _compareVersions(a, b) {
+    const pa = (a || '0.0.0').split('.').map(Number);
+    const pb = (b || '0.0.0').split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+      if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+    }
+    return 0;
+  }
+
+  // ── SDK stdin communication ──────────────────────
+
+  _sendToStdin(message) {
+    if (!this.process || !this.process.stdin || this.process.stdin.destroyed) return false;
+    try {
+      this.process.stdin.write(JSON.stringify(message) + '\n');
+      return true;
+    } catch (e) {
+      logger.debug('proxy', `stdin write failed: ${e.message}`);
+      return false;
+    }
+  }
+
+  sendControlResponse(toolUseId, decision) {
+    return this._sendToStdin({
+      type: 'control_response',
+      tool_use_id: toolUseId,
+      decision,
+    });
+  }
+
+  sendKeepAlive() {
+    return this._sendToStdin({ type: 'keep_alive' });
+  }
+
+  static _buildSDKModeArgs(prompt, options, config) {
+    const args = ['-p', prompt, '--output-format', SDK_OUTPUT_FORMAT, '--input-format', SDK_INPUT_FORMAT];
+
+    if (options.sessionId) args.push('--session-id', options.sessionId);
+    if (options.resume) args.push('--resume', options.resume);
+    if (config.model && config.model !== 'auto') args.push('--model', config.model);
+    if (config.skipPermissions) args.push('--dangerously-skip-permissions');
+    args.push('--include-hook-events');
+    args.push('--replay-user-messages');
+    if (config.verbose) args.push('--verbose');
+
+    return args;
   }
 
   _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
