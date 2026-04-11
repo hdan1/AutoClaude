@@ -877,7 +877,7 @@ function wirePanel(tabId){
     if(!r?.ok){showTgTabStatus(r?.error||'Discovery failed','err');return}
     if(!r.chats||!r.chats.length){showTgTabStatus('No /start messages found. Send /start to your bot first.','err');return}
     tgTabChatList.style.display='block';tgTabChatList.innerHTML='';
-    for(const c of r.chats){const d=document.createElement('div');d.className='tutor-chat-item';d.innerHTML=`<b>${c.username||c.firstName||'?'}</b> (ID: ${c.chatId})`;tgTabChatList.appendChild(d)}
+    for(const c of r.chats){const d=document.createElement('div');d.className='tutor-chat-item';d.innerHTML=`<b>${esc(c.username||c.firstName||'?')}</b> (ID: ${esc(String(c.chatId))})`;tgTabChatList.appendChild(d)}
     showTgTabStatus(`Found ${r.chats.length} chat(s)`,'ok');
   };
   function showTgTabStatus(msg,cls){tgTabStatus.textContent=msg;tgTabStatus.className='tg-status '+(cls||'');tgTabStatus.style.display='block';if(cls==='ok')setTimeout(()=>{tgTabStatus.style.display='none'},3000)}
