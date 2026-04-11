@@ -522,6 +522,26 @@ async function buildHealthStatus() {
   });
 }
 
+// ── Health Status Caching ───────────────────────────
+let healthCache = null;
+let healthCacheTime = 0;
+const HEALTH_CACHE_TTL_MS = 30000;
+
+async function buildHealthStatusCached() {
+  const now = Date.now();
+  if (healthCache && (now - healthCacheTime) < HEALTH_CACHE_TTL_MS) {
+    return healthCache;
+  }
+  healthCache = await buildHealthStatus();
+  healthCacheTime = now;
+  return healthCache;
+}
+
+function invalidateHealthCache() {
+  healthCache = null;
+  healthCacheTime = 0;
+}
+
 app.whenReady().then(async () => {
   // Initialize SQLite settings DB
   const dbPath = path.join(app.getPath('userData'), 'auto-claude.db');
@@ -558,7 +578,7 @@ app.whenReady().then(async () => {
   // ── Startup Health Check ──────────────────────────
   setTimeout(async () => {
     try {
-      const status = await buildHealthStatus();
+      const status = await buildHealthStatusCached();
       if (!status.healthy) send('health-check', status);
     } catch (err) {
       logger.warn('startup', `Health check failed: ${err.message}`);
@@ -1514,12 +1534,16 @@ ipcMain.handle('list-claude-plugins', (event) => {
 
 ipcMain.handle('toggle-claude-plugin', (event, { pluginKey, enabled }) => {
   if (!isTrustedIpcEvent(event, 'toggle-claude-plugin')) return { ok: false, error: 'Untrusted IPC sender' };
-  return claudeDetector.togglePlugin(pluginKey, enabled);
+  const result = claudeDetector.togglePlugin(pluginKey, enabled);
+  invalidateHealthCache();
+  return result;
 });
 
 ipcMain.handle('install-claude-plugin', (event, { source, repo }) => {
   if (!isTrustedIpcEvent(event, 'install-claude-plugin')) return { ok: false, error: 'Untrusted IPC sender' };
-  return claudeDetector.installPlugin(source, repo);
+  const result = claudeDetector.installPlugin(source, repo);
+  invalidateHealthCache();
+  return result;
 });
 
 ipcMain.handle('test-custom-provider', (event, { baseUrl, authToken }) => {
@@ -1775,7 +1799,7 @@ ipcMain.handle('check-claude-update', (event, opts) => {
 // ── Startup Health Check ─────────────────────────
 ipcMain.handle('run-health-check', async (event) => {
   if (!isTrustedIpcEvent(event, 'run-health-check')) return { healthy: false, error: 'Untrusted IPC sender' };
-  try { return await buildHealthStatus(); }
+  try { return await buildHealthStatusCached(); }
   catch (e) { return { healthy: false, error: e.message }; }
 });
 
