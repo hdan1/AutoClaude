@@ -716,8 +716,9 @@ class SessionManager extends EventEmitter {
     const dir = session.state.projectDir;
     if (!dir) return;
     if (!this.config.sessions) this.config.sessions = {};
-    this.config.sessions[dir] = {
-      ...(this.config.sessions[dir] || {}),
+    // R5: Include tabId in key to prevent last-write-wins between concurrent sessions
+    const key = `${dir}::${tabId}`;
+    this.config.sessions[key] = {
       sessionId: session.state.sessionId,
       timestamp: new Date().toISOString(),
       wasRunning: true,
@@ -729,8 +730,9 @@ class SessionManager extends EventEmitter {
 
   _clearResumeState(tabId, session) {
     const dir = session.state.projectDir;
-    if (!dir || !this.config.sessions?.[dir]) return;
-    this.config.sessions[dir].wasRunning = false;
+    if (!dir) return;
+    const key = `${dir}::${tabId}`;
+    if (this.config.sessions) delete this.config.sessions[key];
     this.emit('save-config');
   }
 
