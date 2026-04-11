@@ -692,7 +692,7 @@ class SessionManager extends EventEmitter {
       if (!hasPost || !hasSub) {
         this.emit('reinstall-hooks', projectDir);
       }
-    } catch { /* silent — installHooks will handle errors */ }
+    } catch (e) { logger.debug('session-manager', `hook verification failed: ${e.message}`); }
   }
 
   _waitForAnswerWithTimeout(session, timeoutMs) {
@@ -782,7 +782,9 @@ class SessionManager extends EventEmitter {
         lastUpdated: new Date().toISOString(),
       };
       fs.writeFileSync(this._statsFile(dir), JSON.stringify(data, null, 2), 'utf8');
-    } catch { /* silent */ }
+    } catch (e) {
+      logger.warn('session-manager', `Stats save failed: ${e.message}`);
+    }
   }
 }
 

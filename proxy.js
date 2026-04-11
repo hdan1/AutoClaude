@@ -61,7 +61,7 @@ class ClaudeProxy extends EventEmitter {
         } else {
           proc.kill('SIGTERM');
         }
-      } catch { resolve(); }
+      } catch (e) { logger.debug('proxy', `kill failed for PID ${pid}: ${e.message}`); resolve(); }
     });
   }
 
@@ -447,9 +447,9 @@ class ClaudeProxy extends EventEmitter {
           this.emit('hook-event', entry);
           // Track redundant file reads
           this._trackRedundantReads(entry);
-        } catch (err) { /* silent */ }
+        } catch (err) { logger.debug('proxy', `JSON parse failed: ${err.message}`); }
       }
-    } catch (err) { /* silent */ }
+    } catch (err) { logger.debug('proxy', `hook log read failed: ${err.message}`); }
   }
 
   _flushHookLog(projectDir, result) {
