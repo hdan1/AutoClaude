@@ -230,8 +230,8 @@ class ClaudeProxy extends EventEmitter {
         if (buffer.trim()) this._parseLine(buffer, result);
         if (result.firstTokenTime) result.ttft = result.firstTokenTime - result.startTime;
 
-        setTimeout(() => {
-          this._flushHookLog(projectDir, result);
+        setTimeout(async () => {
+          await this._flushHookLog(projectDir, result);
           this._stopHookWatcher();
           this._mergeToolCalls(result);
           resolve(result);
@@ -305,8 +305,8 @@ class ClaudeProxy extends EventEmitter {
         if (buffer.trim()) this._parseLine(buffer, result);
         if (result.firstTokenTime) result.ttft = result.firstTokenTime - result.startTime;
 
-        setTimeout(() => {
-          this._flushHookLog(projectDir, result);
+        setTimeout(async () => {
+          await this._flushHookLog(projectDir, result);
           this._stopHookWatcher();
           this._mergeToolCalls(result);
           resolve(result);
@@ -504,9 +504,15 @@ class ClaudeProxy extends EventEmitter {
     }
 
     // M1: Poll with byte offset reads instead of re-reading entire file
-    this.hookWatcher = setInterval(() => {
-      this._readHookLog(logFile, result);
-    }, HOOK_POLL_INTERVAL_MS);
+    // Use recursive setTimeout to prevent overlapping async reads
+    const poll = async () => {
+      await this._readHookLog(logFile, result);
+      if (!this._hookWatcherStopped) {
+        this.hookWatcher = setTimeout(poll, HOOK_POLL_INTERVAL_MS);
+      }
+    };
+    this._hookWatcherStopped = false;
+    this.hookWatcher = setTimeout(poll, HOOK_POLL_INTERVAL_MS);
   }
 
   // M1: Read only new bytes from hook log using byte offset (async I/O)
@@ -582,12 +588,13 @@ class ClaudeProxy extends EventEmitter {
   }
 
   _stopHookWatcher() {
+    this._hookWatcherStopped = true;
     if (this.hookWatcher) {
-      clearInterval(this.hookWatcher);
+      clearTimeout(this.hookWatcher);
       this.hookWatcher = null;
     }
     if (this.worktreeHookWatcher) {
-      clearInterval(this.worktreeHookWatcher);
+      clearTimeout(this.worktreeHookWatcher);
       this.worktreeHookWatcher = null;
     }
   }
@@ -605,9 +612,13 @@ class ClaudeProxy extends EventEmitter {
       this.worktreeHookByteOffset = 0;
     }
 
-    this.worktreeHookWatcher = setInterval(() => {
-      this._readWorktreeHookLog(logFile, result);
-    }, HOOK_POLL_INTERVAL_MS);
+    const pollWorktree = async () => {
+      await this._readWorktreeHookLog(logFile, result);
+      if (!this._hookWatcherStopped) {
+        this.worktreeHookWatcher = setTimeout(pollWorktree, HOOK_POLL_INTERVAL_MS);
+      }
+    };
+    this.worktreeHookWatcher = setTimeout(pollWorktree, HOOK_POLL_INTERVAL_MS);
   }
 
   async _readWorktreeHookLog(logFile, result) {
