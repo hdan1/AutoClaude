@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld('api', {
   onMasterWorkspaceOpen: cb => safeOn('master-workspace-open', cb),
   onMasterWorkspaceClose: cb => safeOn('master-workspace-close', cb),
   onRedundantReads:      cb => safeOn('redundant-reads', cb),
+  onSessionState:        cb => safeOn('session-state', cb),
 
   // -- System (auto-update + sleep) --
   restartForUpdate:    () => ipcRenderer.send('restart-for-update'),
