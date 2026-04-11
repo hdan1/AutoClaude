@@ -313,7 +313,6 @@ function processBatchQueue() {
   const item = config.batch.queue.shift();
   if (!item) { batchProcessing = false; return; }
   saveConfig(config);
-  batchProcessing = false;
 
   const projectPath = path.join(config.workspaceRoot || '', item.project);
   if (!fs.existsSync(projectPath)) {
@@ -322,6 +321,7 @@ function processBatchQueue() {
     if (batchBot?.isRunning) {
       batchBot.broadcastDirect(`\u26a0 Batch: project not found: ${item.project}`);
     }
+    batchProcessing = false;
     processBatchQueue();
     return;
   }
@@ -335,6 +335,7 @@ function processBatchQueue() {
     if (batchBot2?.isRunning) {
       batchBot2.broadcastDirect(`\u25b6 Batch started: ${item.project} \u2192 ${item.prompt.substring(0, 80)}`);
     }
+    batchProcessing = false;
   }, 500);
 }
 
@@ -883,8 +884,7 @@ function saveStatusJson(s) {
 }
 
 // ── IPC ───────────────────────────────────────────
-ipcMain.handle('select-directory', async (event, opts = {}) => {
-  if (!isTrustedIpcEvent(event, 'select-directory')) return null;
+ipcMain.handle('select-directory', withTrustedIpc('select-directory', async (event, opts = {}) => {
   const scoped = !!opts.workspaceOnly;
   const rootCheck = scoped ? _resolveWorkspaceRoot() : null;
   const enforceWorkspaceBoundary = scoped && rootCheck?.ok;
@@ -900,13 +900,12 @@ ipcMain.handle('select-directory', async (event, opts = {}) => {
   }
 
   return scoped ? { ok: true, path: selected } : selected;
-});
+}, trustDeps, null));
 ipcMain.handle('load-config', withTrustedIpc('load-config', (event) => {
   config = settingsDb.buildConfigObject(config);
   return config;
-}, trustDeps));
-ipcMain.handle('show-confirm-dialog', async (event, opts) => {
-  if (!isTrustedIpcEvent(event, 'show-confirm-dialog')) return 1;
+}, trustDeps, {}));
+ipcMain.handle('show-confirm-dialog', withTrustedIpc('show-confirm-dialog', async (event, opts) => {
   const r = await dialog.showMessageBox(mainWindow, {
     type: 'warning',
     title: opts.title || 'Confirm',
@@ -916,16 +915,15 @@ ipcMain.handle('show-confirm-dialog', async (event, opts) => {
     cancelId: opts.buttons ? opts.buttons.length - 1 : 1,
   });
   return r.response;
-});
+}, trustDeps, 1));
 
-ipcMain.on('restart-for-update', (event) => {
-  if (!isTrustedIpcEvent(event, 'restart-for-update')) return;
+ipcMain.on('restart-for-update', withTrustedIpc('restart-for-update', (event) => {
   if (!app.isPackaged) return;
   try {
     const { autoUpdater } = require('electron-updater');
     autoUpdater.quitAndInstall();
   } catch (err) { logger.warn('updater', `Auto-update restart failed: ${err?.message || err}`); }
-});
+}, trustDeps));
 
 // ── Session IPC ───────────────────────────────────
 ipcMain.handle('start-session', async (event, o) => {
@@ -996,8 +994,7 @@ ipcMain.handle('start-session', async (event, o) => {
   acquireSleepLock();
 });
 
-ipcMain.handle('stop-session', async (event, data) => {
-  if (!isTrustedIpcEvent(event, 'stop-session')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('stop-session', withTrustedIpc('stop-session', async (event, data) => {
   const tabId = data?.tabId || 'default';
   const session = sessionManager.get(tabId);
   if (session?.state.projectDir && session.state.hooksInstalled && config.hooks?.install) {
@@ -1009,10 +1006,9 @@ ipcMain.handle('stop-session', async (event, data) => {
   untrackPid(tabId);
   releaseSleepLock();
   return { ok: true };
-});
+}, trustDeps));
 
-ipcMain.handle('list-workspace-projects', async (event) => {
-  if (!isTrustedIpcEvent(event, 'list-workspace-projects')) return { ok: false, error: 'Untrusted IPC sender', projects: [] };
+ipcMain.handle('list-workspace-projects', withTrustedIpc('list-workspace-projects', async (event) => {
   const rootCheck = _resolveWorkspaceRoot();
   if (!rootCheck.ok) return { ok: false, error: rootCheck.error, projects: [] };
   let entries = [];
@@ -1033,33 +1029,28 @@ ipcMain.handle('list-workspace-projects', async (event) => {
   }
   projects.sort((a, b) => a.name.localeCompare(b.name));
   return { ok: true, error: '', projects };
-});
+}, trustDeps, { ok: false, error: 'Untrusted IPC sender', projects: [] }));
 
-ipcMain.handle('get-workspace-status', async (event) => {
-  if (!isTrustedIpcEvent(event, 'get-workspace-status')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('get-workspace-status', withTrustedIpc('get-workspace-status', async (event) => {
   return _getWorkspaceStatus();
-});
+}, trustDeps));
 
-ipcMain.handle('open-workspace-project', async (event, projectName) => {
-  if (!isTrustedIpcEvent(event, 'open-workspace-project')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('open-workspace-project', withTrustedIpc('open-workspace-project', async (event, projectName) => {
   const result = await _openWorkspaceProject(projectName);
   return result;
-});
+}, trustDeps));
 
-ipcMain.handle('new-workspace-project', async (event, projectName) => {
-  if (!isTrustedIpcEvent(event, 'new-workspace-project')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('new-workspace-project', withTrustedIpc('new-workspace-project', async (event, projectName) => {
   const result = await _createWorkspaceProject(projectName);
   return result;
-});
+}, trustDeps));
 
-ipcMain.handle('close-workspace-project', async (event, tabId) => {
-  if (!isTrustedIpcEvent(event, 'close-workspace-project')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('close-workspace-project', withTrustedIpc('close-workspace-project', async (event, tabId) => {
   const result = await _closeWorkspaceProject(tabId);
   return result;
-});
+}, trustDeps));
 
-ipcMain.handle('create-project-folder', async (event, projectName) => {
-  if (!isTrustedIpcEvent(event, 'create-project-folder')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('create-project-folder', withTrustedIpc('create-project-folder', async (event, projectName) => {
   const resolved = _resolveWorkspaceProject(projectName);
   if (!resolved.ok) return resolved;
   if (fs.existsSync(resolved.projectPath)) return { ok: false, error: `Project already exists: ${resolved.name}` };
@@ -1070,17 +1061,15 @@ ipcMain.handle('create-project-folder', async (event, projectName) => {
     try { fs.rmSync(resolved.projectPath, { recursive: true, force: true }); } catch (err) { logger.warn('workspace', `Failed to remove project dir: ${err?.message || err}`); }    return { ok: false, error: `git init failed: ${err.message}` };
   }
   return { ok: true, projectPath: resolved.projectPath, name: resolved.name };
-});
+}, trustDeps));
 
-ipcMain.handle('list-sessions', (event, projectDir) => {
-  if (!isTrustedIpcEvent(event, 'list-sessions')) return [];
+ipcMain.handle('list-sessions', withTrustedIpc('list-sessions', (event, projectDir) => {
   const dir = projectDir;
   if (!dir) return [];
   return listSessions(dir);
-});
+}, trustDeps, []));
 
-ipcMain.handle('get-stored-session', async (event, projectDir) => {
-  if (!isTrustedIpcEvent(event, 'get-stored-session')) return null;
+ipcMain.handle('get-stored-session', withTrustedIpc('get-stored-session', async (event, projectDir) => {
   if (!projectDir) return null;
   const entry = settingsDb.getSession(projectDir);
   if (!entry) return null;
@@ -1097,19 +1086,17 @@ ipcMain.handle('get-stored-session', async (event, projectDir) => {
     return null;
   }
   return { sessionId: entry.sessionId, timestamp: entry.timestamp, valid: true };
-});
+}, trustDeps, null));
 
-ipcMain.handle('clear-stored-session', async (event, projectDir) => {
-  if (!isTrustedIpcEvent(event, 'clear-stored-session')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('clear-stored-session', withTrustedIpc('clear-stored-session', async (event, projectDir) => {
   if (!projectDir) return { ok: true };
   settingsDb.deleteSession(projectDir);
   config.sessions = settingsDb.getAllSessions();
   return { ok: true };
-});
+}, trustDeps));
 
 // ── Config & Response IPC ─────────────────────────
-ipcMain.on('save-config', (event, c) => {
-  if (!isTrustedIpcEvent(event, 'save-config')) return;
+ipcMain.on('save-config', withTrustedIpc('save-config', (event, c) => {
   const result = validateConfig(c);
   if (!result.valid) {
     logger.warn('ipc.save-config', 'Invalid config rejected', result.error);
@@ -1118,65 +1105,58 @@ ipcMain.on('save-config', (event, c) => {
   }
   config = { ...config, ...result.config };
   saveConfig(config);
-});
+}, trustDeps));
 
 // ── Settings DB IPC ──────────────────────────────
 ipcMain.handle('get-setting', withTrustedIpc('get-setting', (event, key) => {
   return settingsDb.get(key);
-}, trustDeps));
+}, trustDeps, null));
 
-ipcMain.handle('set-setting', (event, { key, value }) => {
-  if (!isTrustedIpcEvent(event, 'set-setting')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('set-setting', withTrustedIpc('set-setting', (event, { key, value }) => {
   settingsDb.set(key, value);
   config = settingsDb.buildConfigObject(config);
   return { ok: true };
-});
+}, trustDeps));
 
 ipcMain.handle('get-settings-group', withTrustedIpc('get-settings-group', (event, category) => {
   return settingsDb.getGroup(category);
-}, trustDeps));
+}, trustDeps, {}));
 
 ipcMain.handle('get-settings-schema', withTrustedIpc('get-settings-schema', (event) => {
   return { schema: settingsDb.SETTINGS_SCHEMA, categories: settingsDb.CATEGORY_ORDER };
-}, trustDeps));
+}, trustDeps, { schema: {}, categories: [] }));
 
-ipcMain.handle('fetch-models', async (event) => {
-  if (!isTrustedIpcEvent(event, 'fetch-models')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('fetch-models', withTrustedIpc('fetch-models', async (event) => {
   const { fetchModels } = require('./lib/models');
   return fetchModels();
-});
+}, trustDeps));
 
-ipcMain.handle('fetch-models-anthropic', async (event) => {
-  if (!isTrustedIpcEvent(event, 'fetch-models-anthropic')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('fetch-models-anthropic', withTrustedIpc('fetch-models-anthropic', async (event) => {
   const { fetchModelsFromAnthropic } = require('./lib/models');
   return fetchModelsFromAnthropic();
-});
+}, trustDeps));
 
-ipcMain.handle('get-default-models', (event) => {
-  if (!isTrustedIpcEvent(event, 'get-default-models')) return [];
+ipcMain.handle('get-default-models', withTrustedIpc('get-default-models', (event) => {
   const { getDefaultModels } = require('./lib/models');
   return getDefaultModels();
-});
+}, trustDeps, []));
 
-ipcMain.handle('get-custom-models', (event) => {
-  if (!isTrustedIpcEvent(event, 'get-custom-models')) return { models: null };
+ipcMain.handle('get-custom-models', withTrustedIpc('get-custom-models', (event) => {
   try {
     const raw = settingsDb.get('session.customModels');
     return { models: raw ? JSON.parse(raw) : null };
   } catch (err) { logger.warn('models', `Failed to parse custom models: ${err?.message || err}`); return { models: null }; }
-});
+}, trustDeps, { models: null }));
 
-ipcMain.handle('save-custom-models', (event, { models }) => {
-  if (!isTrustedIpcEvent(event, 'save-custom-models')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('save-custom-models', withTrustedIpc('save-custom-models', (event, { models }) => {
   try {
     settingsDb.set('session.customModels', JSON.stringify(models));
     return { ok: true };
   } catch (e) { return { ok: false, error: e.message }; }
-});
+}, trustDeps));
 
 // ── Image Attachment Support ─────────────────────
-ipcMain.handle('save-image-for-prompt', (event, { buffer, filename, tabId }) => {
-  if (!isTrustedIpcEvent(event, 'save-image-for-prompt')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('save-image-for-prompt', withTrustedIpc('save-image-for-prompt', (event, { buffer, filename, tabId }) => {
   try {
     const imgDir = path.join(app.getPath('temp'), 'auto-claude-images', tabId || 'default');
     if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
@@ -1189,10 +1169,9 @@ ipcMain.handle('save-image-for-prompt', (event, { buffer, filename, tabId }) => 
     fs.writeFileSync(filePath, Buffer.from(buffer));
     return { ok: true, path: filePath };
   } catch (e) { return { ok: false, error: e.message }; }
-});
+}, trustDeps));
 
-ipcMain.handle('cleanup-prompt-images', (event, { tabId }) => {
-  if (!isTrustedIpcEvent(event, 'cleanup-prompt-images')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('cleanup-prompt-images', withTrustedIpc('cleanup-prompt-images', (event, { tabId }) => {
   try {
     const imgDir = path.join(app.getPath('temp'), 'auto-claude-images', tabId || 'default');
     if (fs.existsSync(imgDir)) {
@@ -1204,11 +1183,10 @@ ipcMain.handle('cleanup-prompt-images', (event, { tabId }) => {
     }
     return { ok: true };
   } catch (e) { return { ok: false, error: e.message }; }
-});
+}, trustDeps));
 
 // send-response triggers continuation via proxy.sendResponse() -> response-ready event
-ipcMain.on('send-response', (event, data) => {
-  if (!isTrustedIpcEvent(event, 'send-response')) return;
+ipcMain.on('send-response', withTrustedIpc('send-response', (event, data) => {
   const tabId = data?.tabId || 'default';
   const session = sessionManager.get(tabId);
   if (!session?.state.running) return;
@@ -1221,11 +1199,10 @@ ipcMain.on('send-response', (event, data) => {
   sendToTab(tabId, 'hide-question', {});
   sessionManager.sendResponse(tabId, respVal.text);
   sendToTab(tabId, 'log', { type: 'system', text: `Sent answer: ${respVal.text}` });
-});
+}, trustDeps));
 
 // question-answer triggers continuation via proxy.sendResponse() -> response-ready event
-ipcMain.on('question-answer', (event, data) => {
-  if (!isTrustedIpcEvent(event, 'question-answer')) return;
+ipcMain.on('question-answer', withTrustedIpc('question-answer', (event, data) => {
   const tabId = data?.tabId || 'default';
   const session = sessionManager.get(tabId);
   if (!session?.state.running) return;
@@ -1235,19 +1212,17 @@ ipcMain.on('question-answer', (event, data) => {
   sendToTab(tabId, 'hide-question', {});
   sessionManager.sendResponse(tabId, respVal.text);
   sendToTab(tabId, 'log', { type: 'system', text: `Sent answer: ${respVal.text}` });
-});
+}, trustDeps));
 
-ipcMain.on('skip-question', (event, data) => {
-  if (!isTrustedIpcEvent(event, 'skip-question')) return;
+ipcMain.on('skip-question', withTrustedIpc('skip-question', (event, data) => {
   const tabId = data?.tabId || 'default';
   sessionManager.skipQuestion(tabId);
   sendToTab(tabId, 'hide-question', {});
-});
+}, trustDeps));
 
 // ── Chart child window ────────────────────────────
 let chartWindow = null;
-ipcMain.on('open-chart', (event, data) => {
-  if (!isTrustedIpcEvent(event, 'open-chart')) return;
+ipcMain.on('open-chart', withTrustedIpc('open-chart', (event, data) => {
   if (chartWindow && !chartWindow.isDestroyed()) {
     chartWindow.webContents.send('chart-data', data);
     chartWindow.focus();
@@ -1273,11 +1248,10 @@ ipcMain.on('open-chart', (event, data) => {
     chartWindow.webContents.send('chart-data', data);
   });
   chartWindow.on('closed', () => { chartWindow = null; });
-});
+}, trustDeps));
 
 // Cross-platform terminal opening
-ipcMain.on('open-terminal', (event, data) => {
-  if (!isTrustedIpcEvent(event, 'open-terminal')) return;
+ipcMain.on('open-terminal', withTrustedIpc('open-terminal', (event, data) => {
   const tabId = data?.tabId || 'default';
   const session = sessionManager.get(tabId);
   const projDir = session?.state.projectDir;
@@ -1296,18 +1270,16 @@ ipcMain.on('open-terminal', (event, data) => {
   } catch (err) {
     logger.warn('ipc.open-terminal', 'Failed to open terminal', err);
   }
-});
+}, trustDeps));
 
 
-ipcMain.on('get-state', (event, data) => {
-  if (!isTrustedIpcEvent(event, 'get-state')) return;
+ipcMain.on('get-state', withTrustedIpc('get-state', (event, data) => {
   const tabId = data?.tabId || 'default';
   sessionManager.sendState(tabId);
-});
+}, trustDeps));
 
 // -- Telegram IPC (per-project session bots) -----------------
-ipcMain.handle('save-telegram-config', async (event, c) => {
-  if (!isTrustedIpcEvent(event, 'save-telegram-config')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('save-telegram-config', withTrustedIpc('save-telegram-config', async (event, c) => {
   const projectDir = c.projectDir;
   if (!projectDir) return { ok: false, error: 'projectDir is required' };
   const resolved = path.resolve(projectDir);
@@ -1357,10 +1329,9 @@ ipcMain.handle('save-telegram-config', async (event, c) => {
     }
   }
   return { ok: true };
-});
+}, trustDeps));
 
-ipcMain.handle('load-telegram-config', async (event, c) => {
-  if (!isTrustedIpcEvent(event, 'load-telegram-config')) return { enabled: false, hasToken: false, allowedUsers: [], encryptionAvailable: isEncryptionAvailable() };
+ipcMain.handle('load-telegram-config', withTrustedIpc('load-telegram-config', async (event, c) => {
   const projectDir = c?.projectDir;
   if (!projectDir) return { enabled: false, hasToken: false, allowedUsers: [], encryptionAvailable: isEncryptionAvailable() };
   const resolved = path.resolve(projectDir);
@@ -1372,10 +1343,9 @@ ipcMain.handle('load-telegram-config', async (event, c) => {
     allowedUsers: ptConfig.allowedUsers || [],
     encryptionAvailable: isEncryptionAvailable(),
   };
-});
+}, trustDeps, { enabled: false, hasToken: false, allowedUsers: [], encryptionAvailable: false }));
 
-ipcMain.handle('save-master-telegram-config', async (event, incoming) => {
-  if (!isTrustedIpcEvent(event, 'save-master-telegram-config')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('save-master-telegram-config', withTrustedIpc('save-master-telegram-config', async (event, incoming) => {
   const result = validateMasterTelegramConfig(incoming || {});
   if (!result.valid) {
     return { ok: false, code: 'INVALID_MASTER_TELEGRAM_CONFIG', error: result.error };
@@ -1398,12 +1368,9 @@ ipcMain.handle('save-master-telegram-config', async (event, incoming) => {
 
   await _initMasterTelegram();
   return { ok: true };
-});
+}, trustDeps));
 
-ipcMain.handle('load-master-telegram-config', async (event) => {
-  if (!isTrustedIpcEvent(event, 'load-master-telegram-config')) {
-    return { enabled: false, hasToken: false, allowedUsers: [], encryptionAvailable: isEncryptionAvailable() };
-  }
+ipcMain.handle('load-master-telegram-config', withTrustedIpc('load-master-telegram-config', async (event) => {
   const hasToken = !!loadMasterTelegramToken(app.getPath('userData'));
   return {
     enabled: config.masterTelegram?.enabled || false,
@@ -1411,10 +1378,9 @@ ipcMain.handle('load-master-telegram-config', async (event) => {
     allowedUsers: config.masterTelegram?.allowedUsers || [],
     encryptionAvailable: isEncryptionAvailable(),
   };
-});
+}, trustDeps, { enabled: false, hasToken: false, allowedUsers: [], encryptionAvailable: false }));
 
-ipcMain.handle('test-telegram-bot', async (event, c) => {
-  if (!isTrustedIpcEvent(event, 'test-telegram-bot')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('test-telegram-bot', withTrustedIpc('test-telegram-bot', async (event, c) => {
   const projectDir = c?.projectDir;
   if (!projectDir) return { ok: false, error: 'projectDir is required' };
   const bot = getProjectBot(projectDir);
@@ -1422,11 +1388,10 @@ ipcMain.handle('test-telegram-bot', async (event, c) => {
   if (bot._pollingDead) return { ok: false, error: 'Bot polling died (409 conflict — is another instance using the same token?)' };
   if (!bot.isRunning) return { ok: false, error: 'Bot not running for this project' };
   return { ok: true, status: 'Bot is polling' };
-});
+}, trustDeps));
 
 // ── Tutorial: Test Send & Chat ID Discovery ──────
-ipcMain.handle('tutorial-test-send', async (event, { token, chatId }) => {
-  if (!isTrustedIpcEvent(event, 'tutorial-test-send')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('tutorial-test-send', withTrustedIpc('tutorial-test-send', async (event, { token, chatId }) => {
   if (!token || !chatId) return { ok: false, error: 'Token and chat ID are required' };
   try {
     const https = require('https');
@@ -1444,10 +1409,9 @@ ipcMain.handle('tutorial-test-send', async (event, { token, chatId }) => {
     if (result.ok) return { ok: true };
     return { ok: false, error: result.description || 'Telegram API returned an error' };
   } catch (e) { return { ok: false, error: e.message }; }
-});
+}, trustDeps));
 
-ipcMain.handle('tutorial-discover-chat-id', async (event, { token, projectDir }) => {
-  if (!isTrustedIpcEvent(event, 'tutorial-discover-chat-id')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('tutorial-discover-chat-id', withTrustedIpc('tutorial-discover-chat-id', async (event, { token, projectDir }) => {
   // If no token provided directly, load from secure storage for the project
   if (!token && projectDir) {
     const resolved = path.resolve(projectDir);
@@ -1495,7 +1459,7 @@ ipcMain.handle('tutorial-discover-chat-id', async (event, { token, projectDir })
     if (runningBot && resolvedDir) { await startProjectBot(resolvedDir); }
     return { ok: false, error: e.message };
   }
-});
+}, trustDeps));
 
 // ── Claude Code Manager IPC ─────────────────────
 const ALLOWED_INSTALL_METHODS = new Set(['powershell', 'cmd', 'winget', 'curl', 'homebrew']);
@@ -1508,46 +1472,39 @@ function sanitizeClaudeProjectDir(dir) {
   return resolved;
 }
 
-ipcMain.handle('detect-claude-code', (event) => {
-  if (!isTrustedIpcEvent(event, 'detect-claude-code')) return { installed: false, authType: null, authDetail: null };
+ipcMain.handle('detect-claude-code', withTrustedIpc('detect-claude-code', async (event) => {
   return detectClaudeStateWithSecureToken();
-});
+}, trustDeps, { installed: false, authType: null, authDetail: null }));
 
-ipcMain.handle('read-claude-settings', (event, { scope, projectDir }) => {
-  if (!isTrustedIpcEvent(event, 'read-claude-settings')) return { content: '{\n}', path: '', error: 'Untrusted IPC sender' };
+ipcMain.handle('read-claude-settings', withTrustedIpc('read-claude-settings', (event, { scope, projectDir }) => {
   const dir = scope === 'project' ? sanitizeClaudeProjectDir(projectDir) : null;
   return claudeDetector.readSettingsJson(scope, dir);
-});
+}, trustDeps, { content: '{\n}', path: '', error: 'Untrusted IPC sender' }));
 
-ipcMain.handle('write-claude-settings', (event, { scope, projectDir, content }) => {
-  if (!isTrustedIpcEvent(event, 'write-claude-settings')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('write-claude-settings', withTrustedIpc('write-claude-settings', (event, { scope, projectDir, content }) => {
   try {
     const dir = scope === 'project' ? sanitizeClaudeProjectDir(projectDir) : null;
     return claudeDetector.writeSettingsJson(scope, dir, content);
   } catch (e) { return { ok: false, error: e.message }; }
-});
+}, trustDeps));
 
-ipcMain.handle('list-claude-plugins', (event) => {
-  if (!isTrustedIpcEvent(event, 'list-claude-plugins')) return { installed: [], error: 'Untrusted IPC sender' };
+ipcMain.handle('list-claude-plugins', withTrustedIpc('list-claude-plugins', (event) => {
   return claudeDetector.listPlugins();
-});
+}, trustDeps, { installed: [], error: 'Untrusted IPC sender' }));
 
-ipcMain.handle('toggle-claude-plugin', (event, { pluginKey, enabled }) => {
-  if (!isTrustedIpcEvent(event, 'toggle-claude-plugin')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('toggle-claude-plugin', withTrustedIpc('toggle-claude-plugin', (event, { pluginKey, enabled }) => {
   const result = claudeDetector.togglePlugin(pluginKey, enabled);
   invalidateHealthCache();
   return result;
-});
+}, trustDeps));
 
-ipcMain.handle('install-claude-plugin', (event, { source, repo }) => {
-  if (!isTrustedIpcEvent(event, 'install-claude-plugin')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('install-claude-plugin', withTrustedIpc('install-claude-plugin', (event, { source, repo }) => {
   const result = claudeDetector.installPlugin(source, repo);
   invalidateHealthCache();
   return result;
-});
+}, trustDeps));
 
-ipcMain.handle('test-custom-provider', (event, { baseUrl, authToken }) => {
-  if (!isTrustedIpcEvent(event, 'test-custom-provider')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('test-custom-provider', withTrustedIpc('test-custom-provider', (event, { baseUrl, authToken }) => {
 
   const env = readGlobalClaudeEnv();
   const resolvedBaseUrl = String(baseUrl || env.ANTHROPIC_BASE_URL || '').trim();
@@ -1567,10 +1524,9 @@ ipcMain.handle('test-custom-provider', (event, { baseUrl, authToken }) => {
   }
 
   return claudeDetector.testCustomProvider(resolvedBaseUrl, resolvedToken);
-});
+}, trustDeps));
 
-ipcMain.handle('install-claude-code', (event, { method }) => {
-  if (!isTrustedIpcEvent(event, 'install-claude-code')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('install-claude-code', withTrustedIpc('install-claude-code', (event, { method }) => {
   if (!ALLOWED_INSTALL_METHODS.has(method)) return { ok: false, error: 'Invalid install method' };
   return new Promise((resolve) => {
     const emitter = claudeInstaller.install(method);
@@ -1591,10 +1547,9 @@ ipcMain.handle('install-claude-code', (event, { method }) => {
       resolve({ ok: false, error: err, output });
     });
   });
-});
+}, trustDeps));
 
-ipcMain.handle('authenticate-claude-code', (event, { method }) => {
-  if (!isTrustedIpcEvent(event, 'authenticate-claude-code')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('authenticate-claude-code', withTrustedIpc('authenticate-claude-code', (event, { method }) => {
   if (!ALLOWED_AUTH_METHODS.has(method)) return { ok: false, error: 'Invalid auth method' };
   return new Promise((resolve) => {
     const emitter = claudeInstaller.authenticate(method);
@@ -1603,11 +1558,10 @@ ipcMain.handle('authenticate-claude-code', (event, { method }) => {
     emitter.on('complete', () => resolve({ ok: true, output }));
     emitter.on('error', err => resolve({ ok: false, error: err, output }));
   });
-});
+}, trustDeps));
 
 const ALLOWED_PREREQUISITES = new Set(['git', 'node']);
-ipcMain.handle('install-prerequisite', (event, { name }) => {
-  if (!isTrustedIpcEvent(event, 'install-prerequisite')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('install-prerequisite', withTrustedIpc('install-prerequisite', (event, { name }) => {
   if (!ALLOWED_PREREQUISITES.has(name)) return { ok: false, error: 'Invalid prerequisite' };
   return new Promise((resolve) => {
     const emitter = claudeInstaller.installPrerequisite(name);
@@ -1625,11 +1579,10 @@ ipcMain.handle('install-prerequisite', (event, { name }) => {
       resolve({ ok: false, error: err, output });
     });
   });
-});
+}, trustDeps));
 
 // Install recommended tools (GSD, Context7, etc.) via npx
-ipcMain.handle('install-tool', (event, { key }) => {
-  if (!isTrustedIpcEvent(event, 'install-tool')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('install-tool', withTrustedIpc('install-tool', (event, { key }) => {
   const tool = claudeDetector.DEFAULT_RECOMMENDED_TOOLS.find(t => t.key === key);
   if (!tool) return { ok: false, error: `Unknown tool: ${key}` };
   const cmd = tool.installCmd[process.platform];
@@ -1697,10 +1650,9 @@ ipcMain.handle('install-tool', (event, { key }) => {
       resolve({ ok: false, error: err.message, output });
     });
   });
-});
+}, trustDeps));
 
-ipcMain.handle('save-custom-provider', (event, { baseUrl, authToken }) => {
-  if (!isTrustedIpcEvent(event, 'save-custom-provider')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('save-custom-provider', withTrustedIpc('save-custom-provider', (event, { baseUrl, authToken }) => {
 
   try {
     const { readSettingsJson, writeSettingsJson } = claudeDetector;
@@ -1748,10 +1700,9 @@ ipcMain.handle('save-custom-provider', (event, { baseUrl, authToken }) => {
   } catch (e) {
     return { ok: false, error: e.message };
   }
-});
+}, trustDeps));
 
-ipcMain.handle('get-custom-provider-state', (event) => {
-  if (!isTrustedIpcEvent(event, 'get-custom-provider-state')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('get-custom-provider-state', withTrustedIpc('get-custom-provider-state', (event) => {
   const env = readGlobalClaudeEnv();
   let hasSecureToken = false;
   try {
@@ -1768,43 +1719,37 @@ ipcMain.handle('get-custom-provider-state', (event) => {
     hasEnvToken: typeof env.ANTHROPIC_AUTH_TOKEN === 'string' && env.ANTHROPIC_AUTH_TOKEN.length > 0,
     secureStorageAvailable: isEncryptionAvailable(),
   };
-});
+}, trustDeps));
 
 ipcMain.handle('list-settings-tags', withTrustedIpc('list-settings-tags', (event) => {
   return claudeDetector.listSettingsTags();
+}, trustDeps, { tags: [] }));
+
+ipcMain.handle('load-settings-tag', withTrustedIpc('load-settings-tag', (event, { name }) => {
+  return claudeDetector.loadSettingsTag(name);
 }, trustDeps));
 
-ipcMain.handle('load-settings-tag', (event, { name }) => {
-  if (!isTrustedIpcEvent(event, 'load-settings-tag')) return { ok: false, error: 'Untrusted IPC sender' };
-  return claudeDetector.loadSettingsTag(name);
-});
-
-ipcMain.handle('save-settings-tag', (event, { name, content }) => {
-  if (!isTrustedIpcEvent(event, 'save-settings-tag')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('save-settings-tag', withTrustedIpc('save-settings-tag', (event, { name, content }) => {
   try { return claudeDetector.saveSettingsTag(name, content); }
   catch (e) { return { ok: false, error: e.message }; }
-});
+}, trustDeps));
 
-ipcMain.handle('delete-settings-tag', (event, { name }) => {
-  if (!isTrustedIpcEvent(event, 'delete-settings-tag')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('delete-settings-tag', withTrustedIpc('delete-settings-tag', (event, { name }) => {
   try { return claudeDetector.deleteSettingsTag(name); }
   catch (e) { return { ok: false, error: e.message }; }
-});
+}, trustDeps));
 
-ipcMain.handle('check-claude-update', (event, opts) => {
-  if (!isTrustedIpcEvent(event, 'check-claude-update')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('check-claude-update', withTrustedIpc('check-claude-update', (event, opts) => {
   return claudeDetector.checkForUpdate(opts);
-});
+}, trustDeps));
 
 // ── Startup Health Check ─────────────────────────
-ipcMain.handle('run-health-check', async (event) => {
-  if (!isTrustedIpcEvent(event, 'run-health-check')) return { healthy: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('run-health-check', withTrustedIpc('run-health-check', async (event) => {
   try { return await buildHealthStatusCached(); }
   catch (e) { return { healthy: false, error: e.message }; }
-});
+}, trustDeps, { healthy: false, error: 'Untrusted IPC sender' }));
 
-ipcMain.handle('get-app-log-info', (event) => {
-  if (!isTrustedIpcEvent(event, 'get-app-log-info')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('get-app-log-info', withTrustedIpc('get-app-log-info', (event) => {
   try {
     return {
       ok: true,
@@ -1814,10 +1759,9 @@ ipcMain.handle('get-app-log-info', (event) => {
   } catch (e) {
     return { ok: false, error: e.message };
   }
-});
+}, trustDeps));
 
-ipcMain.handle('open-app-log-folder', async (event) => {
-  if (!isTrustedIpcEvent(event, 'open-app-log-folder')) return { ok: false, error: 'Untrusted IPC sender' };
+ipcMain.handle('open-app-log-folder', withTrustedIpc('open-app-log-folder', async (event) => {
   try {
     const logDir = path.dirname(APP_LOG_FILE);
     fs.mkdirSync(logDir, { recursive: true });
@@ -1829,10 +1773,9 @@ ipcMain.handle('open-app-log-folder', async (event) => {
   } catch (e) {
     return { ok: false, error: e.message };
   }
-});
+}, trustDeps));
 
-ipcMain.handle('snapshot-recommended-plugins', async (event) => {
-  if (!isTrustedIpcEvent(event, 'snapshot-recommended-plugins')) return [];
+ipcMain.handle('snapshot-recommended-plugins', withTrustedIpc('snapshot-recommended-plugins', async (event) => {
   try {
     const detection = await claudeDetector.detect();
     if (!detection.installed) return [];
@@ -1842,4 +1785,4 @@ ipcMain.handle('snapshot-recommended-plugins', async (event) => {
     settingsDb.set('system.recommendedPlugins', JSON.stringify(recommended));
     return recommended;
   } catch (e) { return []; }
-});
+}, trustDeps, []));
