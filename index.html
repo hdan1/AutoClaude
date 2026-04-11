@@ -780,6 +780,8 @@ async function closeTab(tabId){
     await window.api.stopSession(tabId);
   }
   if(ts.eTmr)clearInterval(ts.eTmr);
+  if(ts._countdownTimer)clearInterval(ts._countdownTimer);
+  if(ts.activityDebounceTimer)clearTimeout(ts.activityDebounceTimer);
   tabs.delete(tabId);
   document.querySelector(`.t[data-tab-id="${tabId}"]`)?.remove();
   document.querySelector(`.tp[data-tab-id="${tabId}"]`)?.remove();
