@@ -425,6 +425,16 @@ class SessionManager extends EventEmitter {
   sendResponse(tabId, text) {
     const session = this.sessions.get(tabId);
     if (!session || !session.proxy) return;
+
+    // SDK mode: send control response directly instead of kill/restart
+    if (session.proxy.sdkMode && session._lastQuestionData?.toolUseId) {
+      const decision = (text && /^(y|yes|allow|approve)/i.test(text.trim())) ? 'allow' : 'deny';
+      session.proxy.sendControlResponse(session._lastQuestionData.toolUseId, decision);
+      session.state.message = 'Continuing with response...';
+      this.sendState(tabId);
+      return;
+    }
+
     session.proxy.sendResponse(text);
     session.state.message = 'Continuing with response...';
     this.sendState(tabId);
@@ -672,6 +682,27 @@ class SessionManager extends EventEmitter {
       session.pendingResponse = text;
       session.waitingForAnswer = false;
       if (session.answerResolve) { session.answerResolve(); session.answerResolve = null; }
+    });
+
+    // SDK mode: handle control requests (permission prompts)
+    proxy.on('control-request', (request) => {
+      const decision = this.autonomy.evaluatePermission(request, this.config);
+      if (decision.action === 'allow') {
+        proxy.sendControlResponse(request.toolUseId, 'allow');
+        this.send(tabId, 'log', { type: 'system', text: `✅ Auto-approved: ${request.toolName} (${decision.reason})` });
+      } else if (decision.action === 'deny') {
+        proxy.sendControlResponse(request.toolUseId, 'deny');
+        this.send(tabId, 'log', { type: 'system', text: `❌ Denied: ${request.toolName} (${decision.reason})` });
+      } else {
+        // Route to user/telegram for manual decision
+        this.send(tabId, 'permission-request', { tabId, ...request });
+      }
+    });
+
+    // SDK mode: handle session state events
+    proxy.on('session-state', (state) => {
+      session.state.sessionState = state;
+      this.send(tabId, 'session-state', { tabId, state });
     });
   }
 
