@@ -1,0 +1,73 @@
+{
+  "name": "auto-claude",
+  "version": "3.7.1",
+  "description": "Auto Claude — multi-session Claude Code dashboard with real-time monitoring",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "install-hooks": "node install-hooks.js",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "prepare": "node hooks/install-git-hooks.js"
+  },
+  "author": "hdan1 <danherascu1@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "electron-updater": "^6.8.3",
+    "node-telegram-bot-api": "^0.67.0",
+    "sql.js": "^1.14.1"
+  },
+  "devDependencies": {
+    "electron": "^41.0.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.autoclaude.app",
+    "productName": "Auto Claude",
+    "directories": {
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "proxy.js",
+      "index.html",
+      "settings-db.js",
+      "session-manager.js",
+      "install-hooks.js",
+      "lib/**/*",
+      "chart.html",
+      "hooks/auto-claude-hook.js"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Development"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false
+    },
+    "publish": {
+      "provider": "github",
+      "releaseType": "draft"
+    }
+  }
+}
