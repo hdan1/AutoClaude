@@ -564,7 +564,7 @@ app.whenReady().then(async () => {
 
   // Create managers with populated config
   workflowManager = new WorkflowManager([
-    new GsdDetector(),
+    new GsdDetector(config),
     new SuperpowersDetector(config),
   ]);
   sessionManager = new SessionManager(config, sendToTab, workflowManager);
