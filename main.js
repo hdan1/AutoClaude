@@ -1276,13 +1276,19 @@ ipcMain.on('open-terminal', withTrustedIpc('open-terminal', (event, data) => {
       spawn('open', ['-a', 'Terminal', projDir], { detached: true, stdio: 'ignore' });
     } else {
       // Try multiple terminal emulators — x-terminal-emulator is Debian-only
-      const terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal', 'xterm'];
+      const shellCmd = `cd "${projDir}" && claude${skipPerms}`;
+      const termArgs = {
+        'x-terminal-emulator': ['-e', `bash -c '${shellCmd}'`],
+        'gnome-terminal':      ['--', 'bash', '-c', shellCmd],
+        'konsole':             ['-e', 'bash', '-c', shellCmd],
+        'xfce4-terminal':      ['-e', `bash -c '${shellCmd}'`],
+        'xterm':               ['-e', 'bash', '-c', shellCmd],
+      };
       let launched = false;
-      for (const term of terminals) {
+      for (const [term, args] of Object.entries(termArgs)) {
         try {
           require('child_process').execFileSync('which', [term], { stdio: 'pipe', timeout: 2000 });
-          spawn(term, ['-e', 'bash', '-c', `cd "${projDir}" && claude${skipPerms}`],
-            { detached: true, stdio: 'ignore' });
+          spawn(term, args, { detached: true, stdio: 'ignore' });
           launched = true;
           break;
         } catch { /* terminal not found, try next */ }
