@@ -1,6 +1,6 @@
 {
   "name": "auto-claude",
-  "version": "3.7.3",
+  "version": "3.7.4",
   "description": "Auto Claude — multi-session Claude Code dashboard with real-time monitoring",
   "main": "main.js",
   "scripts": {
@@ -40,6 +40,16 @@
       "lib/**/*",
       "chart.html",
       "hooks/auto-claude-hook.js"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
     ],
     "win": {
       "target": "nsis",
