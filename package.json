@@ -1,6 +1,6 @@
 {
   "name": "auto-claude",
-  "version": "3.8.1",
+  "version": "3.9.0",
   "description": "Auto Claude — multi-session Claude Code dashboard with real-time monitoring",
   "main": "main.js",
   "scripts": {
