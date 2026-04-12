@@ -350,8 +350,17 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
-  // Remove default menu bar (File, Edit, View, etc.)
-  Menu.setApplicationMenu(null);
+  // macOS needs a menu for standard shortcuts (Cmd+Q, Cmd+C/V, Cmd+H, Cmd+W)
+  if (process.platform === 'darwin') {
+    Menu.setApplicationMenu(Menu.buildFromTemplate([
+      { role: 'appMenu' },
+      { role: 'editMenu' },
+      { role: 'viewMenu' },
+      { role: 'windowMenu' },
+    ]));
+  } else {
+    Menu.setApplicationMenu(null);
+  }
   mainWindow.loadFile('index.html');
   const appVersion = require('./package.json').version;
   mainWindow.setTitle(`Auto Claude v${appVersion}`);
@@ -813,6 +822,8 @@ function cleanup() {
 }
 
 app.on('window-all-closed', () => {
+  // macOS convention: apps stay running when all windows are closed (until Cmd+Q)
+  if (process.platform === 'darwin') return;
   if (!shouldKeepAppAliveWithoutWindows({ tray })) {
     isQuitting = true;
     app.quit();
@@ -1264,8 +1275,21 @@ ipcMain.on('open-terminal', withTrustedIpc('open-terminal', (event, data) => {
     } else if (process.platform === 'darwin') {
       spawn('open', ['-a', 'Terminal', projDir], { detached: true, stdio: 'ignore' });
     } else {
-      spawn('x-terminal-emulator', ['-e', `cd "${projDir}" && claude${skipPerms}`],
-        { detached: true, stdio: 'ignore' });
+      // Try multiple terminal emulators — x-terminal-emulator is Debian-only
+      const terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal', 'xterm'];
+      let launched = false;
+      for (const term of terminals) {
+        try {
+          require('child_process').execFileSync('which', [term], { stdio: 'pipe', timeout: 2000 });
+          spawn(term, ['-e', 'bash', '-c', `cd "${projDir}" && claude${skipPerms}`],
+            { detached: true, stdio: 'ignore' });
+          launched = true;
+          break;
+        } catch { /* terminal not found, try next */ }
+      }
+      if (!launched) {
+        logger.warn('ipc.open-terminal', 'No supported terminal emulator found on this system');
+      }
     }
   } catch (err) {
     logger.warn('ipc.open-terminal', 'Failed to open terminal', err);
