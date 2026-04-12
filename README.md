@@ -116,9 +116,9 @@ Open Settings via the gear icon. All settings are stored in a local SQLite datab
 ### Key settings
 
 **Autonomy mode:**
-- `Full` — auto-answers all questions, selects recommended options, continues with best judgment
-- `Review` — auto-answers but shows a countdown so you can intervene
-- `Manual` — pauses on every question and waits for your input
+- `Full` — auto-answers all questions immediately, selects recommended options, approves all tool permissions, and continues with best judgment. If no recommended option exists, answers instantly without review. Truly hands-off.
+- `Review` — auto-answers but shows the answer with a countdown timer (default 10s) so you can intervene before it proceeds. Questions without a recommended option get a longer countdown (default 30s). Tool permissions still require approval.
+- `Manual` — pauses on every question and waits for your input. No auto-answering at all.
 
 **Sleep prevention:** Keeps the computer awake while any session is running. Uses Electron's built-in `powerSaveBlocker` — works on Windows, macOS, and Linux. Releases automatically when all sessions stop.
 
