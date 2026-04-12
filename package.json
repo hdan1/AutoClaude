@@ -66,10 +66,14 @@
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "rpm"
       ],
       "icon": "build/icon.png",
-      "category": "Development"
+      "category": "Development",
+      "desktop": {
+        "StartupWMClass": "auto-claude"
+      }
     },
     "nsis": {
       "oneClick": true,
