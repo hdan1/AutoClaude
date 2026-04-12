@@ -48,6 +48,12 @@ const SETTINGS_SCHEMA = {
   'superpowers.declineVisualCompanion':      { category:'superpowers',   type:'toggle', label:'Decline Visual Companion',   default:true,          description:'Auto-decline visual companion prompts. The visual companion requires human interaction and doesn\'t work in autonomous mode.' },
   'superpowers.autoApproveRoutine':          { category:'superpowers',   type:'toggle', label:'Auto-Approve Routine',       default:true,          description:'Auto-approve routine confirmations (proceed, continue, plan approval). Keeps unattended workflows flowing.' },
   'superpowers.skillChain':                  { category:'superpowers',   type:'hidden', label:'Skill Chain',                default:'[]' },
+  'gsd.enabled':                             { category:'gsd',           type:'toggle', label:'Enabled',                    default:true,          description:'Enable GSD workflow engine. Provides structured phase-based project execution with autonomous progression.' },
+  'gsd.autoNext':                            { category:'gsd',           type:'toggle', label:'Auto Next',                  default:true,          description:'Automatically advance to the next phase when the current one completes. OFF pauses between phases for manual review.' },
+  'gsd.derailmentCorrection':                { category:'gsd',           type:'toggle', label:'Derailment Correction',      default:true,          description:'Detect and correct when a phase execution goes off-track. Sends a refocus prompt to realign with the phase plan.' },
+  'gsd.maxPhaseRetries':                     { category:'gsd',           type:'number', label:'Max Phase Retries',           default:3, min:1, max:10, description:'Maximum retry attempts per phase on failure before marking it as blocked. Higher values increase resilience at the cost of time.' },
+  'gsd.autoContinueDelaySecs':               { category:'gsd',           type:'number', label:'Auto Continue Delay (s)',     default:15, min:5, max:120, description:'Seconds to wait before auto-continuing to the next phase. Gives time to review results or intervene.' },
+  'gsd.phaseTimeoutMinutes':                 { category:'gsd',           type:'number', label:'Phase Timeout (min)',         default:0, min:0,      description:'Maximum minutes a single phase can run before being timed out. 0 = no timeout (unlimited).' },
   'projectTelegram':                         { category:'telegram',      type:'hidden', label:'Project Telegram Configs',   default:'{}' },
   'system.preventSleep':                      { category:'system',        type:'toggle', label:'Prevent Sleep',              default:true,          description:'Keep the computer awake while sessions are running. Prevents sleep/suspend during long Claude operations. Releases automatically when all sessions stop.' },
   'system.recommendedPlugins':                { category:'system',        type:'hidden', label:'Recommended Plugins',        default:'[]',          description:'JSON array of recommended plugins to install on setup. Set via "Save as Recommended" button.' },
@@ -69,6 +75,7 @@ const CATEGORY_ORDER = [
   { key:'hooks',         icon:'🧩', label:'Hooks' },
   { key:'batch',         icon:'📦', label:'Batch' },
   { key:'superpowers',   icon:'✨', label:'Superpowers' },
+  { key:'gsd',           icon:'🚀', label:'GSD' },
   { key:'system',        icon:'💻', label:'System' },
 ];
 
