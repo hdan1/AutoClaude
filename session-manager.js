@@ -527,6 +527,12 @@ class SessionManager extends EventEmitter {
       if (m.costUsd != null) {
         augmented.costUsd = session.state.totalCostUsd + m.costUsd;
       }
+      // Include per-turn input tokens and context window size for context bar
+      if (m.inputTokens != null) {
+        augmented.turnInputTokens = m.inputTokens;
+        const guard = this.config.contextGuard || {};
+        augmented.contextWindow = contextGuard.getContextWindow(session.state.model, guard.contextWindowOverride, null);
+      }
       // Include project-level cumulative stats
       augmented.projectInputTokens = session.state.projectInputTokens + augmented.inputTokens;
       augmented.projectOutputTokens = session.state.projectOutputTokens + augmented.outputTokens;
