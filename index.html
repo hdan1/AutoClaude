@@ -458,7 +458,7 @@ body{margin:0;background:var(--bg);color:var(--tx);font-family:Segoe UI,system-u
   <span onclick="window.api.restartForUpdate()" style="text-decoration:underline;cursor:pointer">Restart Now</span>
 </div>
 <div class="topbar">
-  <div class="logo">AUTO CLAUDE</div>
+  <div class="logo">AUTO CLAUDE <span id="appVersion" style="font-size:.55em;opacity:.5"></span></div>
   <span class="cc-badge missing" id="ccBadge" title="Claude Code Status"><span class="dot">●</span> <span id="ccBadgeText">Checking...</span></span>
   <div style="flex:1"></div>
   <div class="lt" id="layoutToggle">
@@ -593,6 +593,7 @@ body{margin:0;background:var(--bg);color:var(--tx);font-family:Segoe UI,system-u
 const tabs=new Map();
 let activeTabId=null;
 const $=id=>document.getElementById(id);
+window.api.getAppVersion().then(v=>{$('appVersion').textContent='v'+v});
 function $t(tabId,sel){const p=document.querySelector(`.tp[data-tab-id="${tabId}"]`);return p?p.querySelector(`[data-el="${sel}"]`):null}
 function createTabState(tabId){return {tabId,projectDir:'',loopStart:null,eTmr:null,started:false,autoScroll:true,totalTools:0,totalSubTools:0,currentModel:'',sessionTokensIn:0,sessionTokensOut:0,lastToolLine:null,initLogged:false,cmdPickerIdx:-1,logBuffer:[],logFlushScheduled:false,activityType:'idle',activeTool:null,gsdPhase:null,activeSkill:null,skillSource:null,questionActive:false,activityDebounceTimer:null,pendingActivity:null,projectAlias:'',ttftHistory:[],tokenSnapshots:[],toolTimeline:[],responseTimes:[],lastToolResultAt:null,_countdownTimer:null,attachedImages:[]}}
 

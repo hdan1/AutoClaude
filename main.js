@@ -927,6 +927,7 @@ ipcMain.handle('load-config', withTrustedIpc('load-config', (event) => {
   config = settingsDb.buildConfigObject(config);
   return config;
 }, trustDeps, {}));
+ipcMain.handle('get-app-version', () => app.getVersion());
 ipcMain.handle('show-confirm-dialog', withTrustedIpc('show-confirm-dialog', async (event, opts) => {
   const r = await dialog.showMessageBox(mainWindow, {
     type: 'warning',

@@ -7,6 +7,8 @@ function safeOn(channel, callback) {
 }
 
 contextBridge.exposeInMainWorld('api', {
+  // -- App info --
+  getAppVersion:    () => ipcRenderer.invoke('get-app-version'),
   // -- Session API (all accept tabId as first param) --
   startSession:     (tabId, c) => ipcRenderer.invoke('start-session', { tabId, ...c }),
   stopSession:      (tabId) => ipcRenderer.invoke('stop-session', { tabId }),
