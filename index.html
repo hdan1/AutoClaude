@@ -2972,7 +2972,7 @@ setInterval(async()=>{
     if(!s.claudeCode.installed){
       addItem('\u274C','Claude Code','Not installed','Install',()=>doInstallClaude());
     } else if(!s.claudeCode.authenticated){
-      addItem('\u26A0\uFE0F','Claude Code v'+(s.claudeCode.version||''),'Not authenticated','Authenticate',()=>doAuthClaude());
+      addItem('\u26A0\uFE0F','Claude Code v'+(s.claudeCode.version||''),'Not authenticated','Authenticate',()=>showAuthPicker());
     } else {
       addItem('\u2705','Claude Code v'+(s.claudeCode.version||''),(s.claudeCode.authType||'')+(s.claudeCode.authDetail?' \u2014 '+s.claudeCode.authDetail:''),null,null);
     }
@@ -3084,13 +3084,37 @@ setInterval(async()=>{
       else{showProgress('Install failed: '+(result.error||'Unknown error'));}
     }catch(e){showProgress('Install error: '+e.message);}
   }
-  async function doAuthClaude(){
-    showProgress('Authenticating Claude Code...');
-    try{
-      const result=await window.api.authenticateClaudeCode({method:'oauth'});
-      if(result.ok){await refreshStatus();}
-      else{showProgress('Auth failed: '+(result.error||'Unknown error'));}
-    }catch(e){showProgress('Auth error: '+e.message);}
+  function showAuthPicker(){
+    // Remove any existing auth picker
+    const existing=document.getElementById('setupAuthPicker');
+    if(existing){existing.remove();return;}
+    const picker=document.createElement('div');
+    picker.id='setupAuthPicker';
+    picker.style.cssText='padding:8px 12px 12px;border-top:1px solid var(--bg3);';
+    const authOptions=[
+      {method:'anthropic',label:'Anthropic Account',desc:'Claude Pro, Max, Team, or Enterprise',rec:true},
+      {method:'console',label:'Console API Key',desc:'Pre-paid credits',rec:false},
+    ];
+    picker.innerHTML='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Choose authentication method:</div>'+
+      authOptions.map(o=>'<div class="setup-auth-opt" data-method="'+o.method+'" style="padding:8px 12px;margin:4px 0;border:1px solid var(--bg3);border-radius:6px;cursor:pointer;transition:border-color .15s"><div style="display:flex;align-items:center;gap:6px"><strong style="font-size:12px;color:var(--tx1)">'+o.label+'</strong>'+(o.rec?'<span style="font-size:9px;background:var(--grn);color:#000;padding:1px 5px;border-radius:3px">Recommended</span>':'')+'</div><div style="font-size:11px;color:var(--tx3);margin-top:2px">'+o.desc+'</div></div>').join('')+
+      '<div id="setupAuthLog" style="display:none;margin-top:8px;padding:6px 8px;background:var(--bg1);border-radius:4px;font-size:11px;color:var(--tx2);font-family:monospace;white-space:pre-wrap;max-height:100px;overflow-y:auto"></div>';
+    items.appendChild(picker);
+    picker.querySelectorAll('.setup-auth-opt').forEach(opt=>{
+      opt.onmouseenter=()=>{opt.style.borderColor='var(--acc)'};
+      opt.onmouseleave=()=>{opt.style.borderColor='var(--bg3)'};
+      opt.onclick=async()=>{
+        const method=opt.dataset.method;
+        const log=picker.querySelector('#setupAuthLog');
+        log.style.display='block';log.textContent='Starting '+method+' login...\n';
+        picker.querySelectorAll('.setup-auth-opt').forEach(o=>{o.style.pointerEvents='none';o.style.opacity='0.5'});
+        opt.style.opacity='1';opt.style.borderColor='var(--acc)';
+        try{
+          const result=await window.api.authenticateClaudeCode({method});
+          if(result.ok){log.textContent+='Login successful!';await refreshStatus();}
+          else{log.textContent+='Error: '+(result.error||'Failed');picker.querySelectorAll('.setup-auth-opt').forEach(o=>{o.style.pointerEvents='';o.style.opacity=''});}
+        }catch(e){log.textContent+='Error: '+e.message;picker.querySelectorAll('.setup-auth-opt').forEach(o=>{o.style.pointerEvents='';o.style.opacity=''});}
+      };
+    });
   }
   async function doInstallPlugin(key,repo){
     const name=key.split('@')[0];
