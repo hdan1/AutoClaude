@@ -2879,7 +2879,7 @@ setInterval(async()=>{
         const recPlugins=healthData?.plugins?.missing||[];
         const recTools=healthData?.tools?.missing||[];
         if(recPlugins.length||recTools.length){
-          browseHtml+='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px;font-weight:500">RECOMMENDED</div>';
+          browseHtml+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-size:11px;color:var(--tx2);font-weight:500">RECOMMENDED</div><button class="ccm-btn ccm-btn-primary" style="padding:3px 10px;font-size:10px" id="ccmInstallAllRec">Install All</button></div>';
           for(const p of recPlugins){
             const name=p.key.split('@')[0];
             browseHtml+=`<div class="ccm-plugin-row"><div class="ccm-plugin-icon" style="background:#8957e5">📦</div><div class="ccm-plugin-info"><div><span class="ccm-plugin-name">${esc(name)}</span><span class="ccm-plugin-source">${esc(p.key.split('@')[1]||'')}</span></div><div class="ccm-plugin-desc">Recommended plugin</div></div><button class="ccm-btn ccm-btn-primary" style="padding:3px 10px;font-size:10px" data-install-plugin="${esc(p.key)}" data-install-repo="${esc(p.repo||'')}">Install</button></div>`;
@@ -2897,26 +2897,61 @@ setInterval(async()=>{
           </div>
         `;
         list.innerHTML=browseHtml;
-        // Plugin install buttons
+        // Register a single tool progress listener that routes to the right row
+        const toolProgressEls={};
+        window.api.onToolProgress(data=>{
+          const el=toolProgressEls[data.key];
+          if(!el)return;
+          if(!data.done&&data.output){el.textContent=data.output.slice(-120)}
+        });
+        // Plugin install buttons — non-blocking with status
         list.querySelectorAll('[data-install-plugin]').forEach(btn=>{
           btn.onclick=async()=>{
             const key=btn.dataset.installPlugin;const repo=btn.dataset.installRepo||null;
-            btn.textContent='Installing...';btn.disabled=true;
-            const r=await window.api.installClaudePlugin({source:key,repo:repo||null});
-            if(r.ok){setTimeout(()=>renderPlugins(),500)}
-            else{btn.textContent='Failed';btn.style.background='var(--red)'}
+            btn.textContent='Installing…';btn.disabled=true;btn.style.opacity='0.7';
+            window.api.installClaudePlugin({source:key,repo:repo||null}).then(r=>{
+              if(r.ok){btn.textContent='✓ Done';btn.style.background='var(--grn)';setTimeout(()=>renderPlugins(),800)}
+              else{btn.textContent='Failed';btn.style.background='var(--red)';btn.disabled=false;btn.title=r.error||''}
+            }).catch(()=>{btn.textContent='Error';btn.style.background='var(--red)';btn.disabled=false});
           };
         });
-        // Tool install buttons
+        // Tool install buttons — non-blocking with progress
         list.querySelectorAll('[data-install-tool]').forEach(btn=>{
           btn.onclick=async()=>{
             const key=btn.dataset.installTool;
-            btn.textContent='Installing...';btn.disabled=true;
-            const r=await window.api.installTool({key});
-            if(r.ok){setTimeout(()=>renderPlugins(),500)}
-            else{btn.textContent='Failed';btn.style.background='var(--red)'}
+            btn.textContent='Installing…';btn.disabled=true;btn.style.opacity='0.7';
+            // Add a small progress area below the row
+            const row=btn.closest('.ccm-plugin-row');
+            let progEl=row.querySelector('.ccm-install-prog');
+            if(!progEl){progEl=document.createElement('div');progEl.className='ccm-install-prog';progEl.style.cssText='font-size:9px;color:var(--tx2);margin-top:2px;max-height:40px;overflow:hidden;word-break:break-all';row.querySelector('.ccm-plugin-info').appendChild(progEl)}
+            toolProgressEls[key]=progEl;
+            window.api.installTool({key}).then(r=>{
+              delete toolProgressEls[key];
+              if(r.ok){btn.textContent='✓ Done';btn.style.background='var(--grn)';progEl.textContent='';setTimeout(()=>renderPlugins(),800)}
+              else{btn.textContent='Failed';btn.style.background='var(--red)';btn.disabled=false;progEl.textContent=r.error||'';btn.title=r.error||''}
+            }).catch(()=>{btn.textContent='Error';btn.style.background='var(--red)';btn.disabled=false});
           };
         });
+        // Install All Recommended button
+        const installAllRecBtn=list.querySelector('#ccmInstallAllRec');
+        if(installAllRecBtn){
+          installAllRecBtn.onclick=async()=>{
+            installAllRecBtn.textContent='Installing…';installAllRecBtn.disabled=true;
+            const allPluginBtns=[...list.querySelectorAll('[data-install-plugin]')];
+            const allToolBtns=[...list.querySelectorAll('[data-install-tool]')];
+            // Fire all installs concurrently
+            for(const btn of allPluginBtns){if(!btn.disabled)btn.click()}
+            for(const btn of allToolBtns){if(!btn.disabled)btn.click()}
+            // Poll until all buttons settle (disabled+done or failed)
+            const checkDone=()=>{
+              const allBtns=[...allPluginBtns,...allToolBtns];
+              const allSettled=allBtns.every(b=>b.textContent.includes('Done')||b.textContent.includes('Failed')||b.textContent.includes('Error'));
+              if(allSettled){installAllRecBtn.textContent='Done!';setTimeout(()=>renderPlugins(),800)}
+              else setTimeout(checkDone,500);
+            };
+            setTimeout(checkDone,1000);
+          };
+        }
         body.querySelector('#ccmAddRepo').onclick=()=>{
           body.querySelector('#ccmAddRepoForm').style.display='block';
           body.querySelector('#ccmAddRepo').style.display='none';

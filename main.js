@@ -1623,12 +1623,26 @@ ipcMain.handle('install-tool', withTrustedIpc('install-tool', (event, { key }) =
   if (!parsed.ok) return { ok: false, error: parsed.error };
   logger.info('install-tool', `Starting installer for ${key}: ${cmd}`);
 
+  const INSTALL_TIMEOUT_MS = 120000; // 2 minute timeout
+
   return new Promise((resolve) => {
+    let settled = false;
     const proc = require('child_process').spawn(parsed.executable, parsed.args, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: false,
+      shell: process.platform === 'win32',
       windowsHide: true,
     });
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        try { proc.kill(); } catch (e) { /* ignore */ }
+        const errMsg = `Install timed out after ${INSTALL_TIMEOUT_MS / 1000}s`;
+        logger.error('install-tool', `${key} timed out`);
+        send('install-tool-progress', { key, output: errMsg, done: true, error: errMsg });
+        resolve({ ok: false, error: errMsg, output });
+      }
+    }, INSTALL_TIMEOUT_MS);
 
     let output = '';
     proc.stdout.on('data', d => {
@@ -1644,6 +1658,10 @@ ipcMain.handle('install-tool', withTrustedIpc('install-tool', (event, { key }) =
     });
 
     proc.on('close', code => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+
       let context7Installed = false;
       if (key === 'context7') {
         try {
@@ -1677,6 +1695,9 @@ ipcMain.handle('install-tool', withTrustedIpc('install-tool', (event, { key }) =
     });
 
     proc.on('error', err => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       logger.error('install-tool', `${key} spawn error`, err);
       send('install-tool-progress', { key, output: err.message, done: true, error: err.message });
       resolve({ ok: false, error: err.message, output });
@@ -1695,7 +1716,9 @@ ipcMain.handle('save-custom-provider', withTrustedIpc('save-custom-provider', (e
     const secureAvailable = isEncryptionAvailable();
 
     const tokenMode = tokenProvided ? (token ? 'set' : 'clear') : 'preserve';
-    const useSecureToken = secureAvailable && tokenMode === 'set' && token.length > 0;
+    // Always write token to settings.json so Claude Code can read it directly.
+    // Secure storage is used as an additional backup, not as a replacement.
+    const useSecureToken = false;
 
     const transformed = applyCustomProviderToSettings({
       settingsContent: content,
@@ -1711,14 +1734,11 @@ ipcMain.handle('save-custom-provider', withTrustedIpc('save-custom-provider', (e
 
     if (tokenMode === 'clear') {
       clearCustomProviderToken(app.getPath('userData'));
-    } else if (tokenMode === 'set' && useSecureToken) {
-      const saved = saveCustomProviderToken(app.getPath('userData'), token);
-      if (!saved) {
-        return { ok: false, error: 'Secure storage unavailable for provider token' };
+    } else if (tokenMode === 'set') {
+      // Also save to secure storage as backup if available
+      if (secureAvailable) {
+        try { saveCustomProviderToken(app.getPath('userData'), token); } catch (e) { /* best effort */ }
       }
-    } else if (tokenMode === 'set' && !useSecureToken) {
-      // Ensure plaintext fallback in settings.json is the only active token source
-      clearCustomProviderToken(app.getPath('userData'));
     }
 
     writeSettingsJson('global', null, transformed.content);
@@ -1726,8 +1746,8 @@ ipcMain.handle('save-custom-provider', withTrustedIpc('save-custom-provider', (e
 
     return {
       ok: true,
-      secureToken: tokenMode === 'set' ? useSecureToken : null,
-      warning: tokenMode === 'set' && !useSecureToken && token ? 'Secure storage unavailable; token stored in settings.json' : null,
+      secureToken: false,
+      warning: null,
     };
   } catch (e) {
     return { ok: false, error: e.message };
