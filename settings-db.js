@@ -195,6 +195,13 @@ function set(key, value, category) {
 function getGroup(category) {
   if (!_db) return {};
   const result = {};
+  // Pre-fill with schema defaults for this category
+  for (const [key, schema] of Object.entries(SETTINGS_SCHEMA)) {
+    if (schema.category === category && schema.type !== 'hidden') {
+      result[key] = schema.default;
+    }
+  }
+  // Override with stored values
   const stmt = _db.prepare('SELECT key, value FROM settings WHERE category = ?');
   stmt.bind([category]);
   while (stmt.step()) {

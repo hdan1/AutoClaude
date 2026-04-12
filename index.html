@@ -1423,7 +1423,10 @@ createTab();
         field.innerHTML=`<label class="settings-label">${meta.label}${tip(meta)}</label><div class="settings-row"><input type="number" class="settings-number" value="${val??''}" data-key="${key}"${meta.min!=null?' min="'+meta.min+'"':''}><span class="settings-saved" data-saved="${key}">Saved ✓</span></div>`;
         const inp=field.querySelector('input');
         inp.onblur=()=>{
-          const v=inp.value===''?null:Number(inp.value);
+          if(inp.value===''){saveSetting(key,meta.default??null);inp.value=meta.default??'';return}
+          let v=Number(inp.value);
+          if(isNaN(v)){v=meta.default??null;inp.value=v??''}
+          else{if(meta.min!=null&&v<meta.min){v=meta.min;inp.value=v}if(meta.max!=null&&v>meta.max){v=meta.max;inp.value=v}}
           saveSetting(key,v);
         };
         inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur()});
