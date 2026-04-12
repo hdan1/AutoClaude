@@ -71,9 +71,7 @@
       ],
       "icon": "build/icon.png",
       "category": "Development",
-      "desktop": {
-        "StartupWMClass": "auto-claude"
-      }
+      "executableName": "auto-claude"
     },
     "nsis": {
       "oneClick": true,
