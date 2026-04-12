@@ -49,6 +49,14 @@
       {
         "from": "build/icon.png",
         "to": "icon.png"
+      },
+      {
+        "from": "install-hooks.js",
+        "to": "install-hooks.js"
+      },
+      {
+        "from": "hooks/auto-claude-hook.js",
+        "to": "hooks/auto-claude-hook.js"
       }
     ],
     "win": {

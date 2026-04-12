@@ -838,6 +838,9 @@ process.on('uncaughtException', (err) => {
   cleanup();
 });
 process.on('unhandledRejection', (reason) => {
+  // Suppress auto-update 404s — already logged by autoUpdater.on('error')
+  const msg = String(reason?.message || reason || '');
+  if (msg.includes('releases.atom') || msg.includes('auto-update')) return;
   logger.error('app', 'Unhandled rejection', reason);
 });
 
@@ -855,9 +858,15 @@ function detectQuestion(t) {
 }
 
 // ── Hook installation ─────────────────────────────
+function getInstallerPath() {
+  // In packaged app, install-hooks.js is in extraResources (outside asar)
+  if (app.isPackaged) return path.join(process.resourcesPath, 'install-hooks.js');
+  return path.join(__dirname, 'install-hooks.js');
+}
+
 function installHooks(projectDir) {
   try {
-    const installerPath = path.join(__dirname, 'install-hooks.js');
+    const installerPath = getInstallerPath();
     // C2: Use execFileSync with arguments array to prevent injection
     execFileSync('node', [installerPath, projectDir], { stdio: 'pipe' });
     send('log', { type: 'system', text: '\u2713 Telemetry hooks installed (async \u2014 zero latency)' });
@@ -871,7 +880,7 @@ function installHooks(projectDir) {
 
 function uninstallHooks(projectDir) {
   try {
-    const installerPath = path.join(__dirname, 'install-hooks.js');
+    const installerPath = getInstallerPath();
     // C2: Use execFileSync with arguments array
     execFileSync('node', [installerPath, projectDir, '--uninstall'], { stdio: 'pipe' });
   } catch (err) {
