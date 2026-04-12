@@ -736,6 +736,39 @@ const GSD_COMMANDS=[
   {cmd:'/gsd:forensics',desc:'Post-mortem for failed workflows'},
 ];
 
+function highlightJson(text, errorLine) {
+  const lines = text.split('\n');
+  return lines.map((line, idx) => {
+    let h = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    h = h.replace(/("(?:[^"\\]|\\.)*")\s*:/g, '<span class="json-key">$1</span>:');
+    h = h.replace(/:\s*("(?:[^"\\]|\\.)*")/g, ': <span class="json-string">$1</span>');
+    h = h.replace(/(?<=[\[,]\s*)("(?:[^"\\]|\\.)*")/g, '<span class="json-string">$1</span>');
+    h = h.replace(/\b(-?\d+\.?\d*(?:[eE][+-]?\d+)?)\b/g, '<span class="json-number">$1</span>');
+    h = h.replace(/\b(true|false)\b/g, '<span class="json-bool">$1</span>');
+    h = h.replace(/\b(null)\b/g, '<span class="json-null">$1</span>');
+    h = h.replace(/([{}[\]])/g, '<span class="json-brace">$1</span>');
+    if (errorLine !== undefined && idx === errorLine) {
+      return '<span class="json-error-line">' + h + '</span>';
+    }
+    return h;
+  }).join('\n');
+}
+
+function parseJsonErrorPosition(errMsg) {
+  const lineColMatch = errMsg.match(/line\s+(\d+)\s+column\s+(\d+)/i);
+  if (lineColMatch) return { line: parseInt(lineColMatch[1], 10) - 1, col: parseInt(lineColMatch[2], 10) - 1 };
+  const posMatch = errMsg.match(/position\s+(\d+)/i);
+  return posMatch ? { position: parseInt(posMatch[1], 10) } : null;
+}
+
+function positionToLineCol(text, position) {
+  let line = 0, col = 0;
+  for (let i = 0; i < position && i < text.length; i++) {
+    if (text[i] === '\n') { line++; col = 0; } else { col++; }
+  }
+  return { line, col };
+}
+
 function createTab(){
   const tabId='tab-'+Date.now();
   tabs.set(tabId,createTabState(tabId));
@@ -2609,22 +2642,83 @@ setInterval(async()=>{
 
     // ── Raw JSON Mode ──
     function renderRaw(){
-      const json=JSON.stringify(workingSettings||{},null,2);
-      editorScroll.innerHTML='<textarea class="ccm-editor-area" id="ccmRawEditor" spellcheck="false" style="height:calc(100% - 4px);min-height:350px">'+esc(json)+'</textarea>';
-      const editor=editorScroll.querySelector('#ccmRawEditor');
-      statusEl.style.display='inline';
-      validateRawJson();
+      const json = JSON.stringify(workingSettings || {}, null, 2);
 
-      editor.addEventListener('input',validateRawJson);
-      editor.addEventListener('keydown',e=>{
-        if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();body.querySelector('#ccmSave').click()}
-        if(e.key==='Tab'){e.preventDefault();const s=editor.selectionStart,end=editor.selectionEnd;editor.value=editor.value.substring(0,s)+'  '+editor.value.substring(end);editor.selectionStart=editor.selectionEnd=s+2;validateRawJson()}
+      editorScroll.innerHTML = '<div class="ccm-editor-wrap">' +
+        '<div class="ccm-line-gutter" id="ccmLineGutter"></div>' +
+        '<div class="ccm-editor-container">' +
+        '<pre class="ccm-highlight-overlay" id="ccmHighlightOverlay"></pre>' +
+        '<textarea class="ccm-editor-area-v2" id="ccmRawEditor" spellcheck="false">' + esc(json) + '</textarea>' +
+        '</div></div>';
+
+      const editor = editorScroll.querySelector('#ccmRawEditor');
+      const overlay = editorScroll.querySelector('#ccmHighlightOverlay');
+      const gutter = editorScroll.querySelector('#ccmLineGutter');
+      statusEl.style.display = 'inline';
+
+      function updateGutter(text) {
+        const lineCount = text.split('\n').length;
+        let html = '';
+        for (let i = 1; i <= lineCount; i++) html += i + '\n';
+        gutter.textContent = html;
+      }
+
+      function updateHighlight(text, errorLine) {
+        overlay.innerHTML = highlightJson(text, errorLine);
+      }
+
+      function syncScroll() {
+        overlay.scrollTop = editor.scrollTop;
+        overlay.scrollLeft = editor.scrollLeft;
+        gutter.scrollTop = editor.scrollTop;
+      }
+
+      function validateAndRender() {
+        const text = editor.value;
+        updateGutter(text);
+        let errorLine;
+        try {
+          JSON.parse(text);
+          statusEl.textContent = '\u25cf Valid JSON';
+          statusEl.className = 'ccm-json-status valid';
+          body.querySelector('#ccmSave').disabled = false;
+          errorLine = undefined;
+        } catch (e) {
+          const pos = parseJsonErrorPosition(e.message);
+          let line, col;
+          if (pos && pos.line !== undefined) {
+            line = pos.line; col = pos.col;
+          } else if (pos && pos.position !== undefined) {
+            const lc = positionToLineCol(text, pos.position);
+            line = lc.line; col = lc.col;
+          }
+          if (line !== undefined) {
+            statusEl.textContent = '\u25cf Line ' + (line + 1) + ':' + ((col || 0) + 1) + ' \u2014 ' + e.message.replace(/^JSON\.parse:\s*/i, '').slice(0, 60);
+          } else {
+            statusEl.textContent = '\u25cf Invalid JSON';
+          }
+          statusEl.className = 'ccm-json-status invalid';
+          body.querySelector('#ccmSave').disabled = true;
+          errorLine = line;
+        }
+        updateHighlight(text, errorLine);
+      }
+
+      editor.addEventListener('input', function() { validateAndRender(); syncScroll(); });
+      editor.addEventListener('scroll', syncScroll);
+
+      editor.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); body.querySelector('#ccmSave').click(); }
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          var s = editor.selectionStart, end = editor.selectionEnd;
+          editor.value = editor.value.substring(0, s) + '  ' + editor.value.substring(end);
+          editor.selectionStart = editor.selectionEnd = s + 2;
+          validateAndRender();
+        }
       });
 
-      function validateRawJson(){
-        try{JSON.parse(editor.value);statusEl.textContent='● Valid JSON';statusEl.className='ccm-json-status valid';body.querySelector('#ccmSave').disabled=false}
-        catch(e){statusEl.textContent='● Invalid JSON';statusEl.className='ccm-json-status invalid';body.querySelector('#ccmSave').disabled=true}
-      }
+      validateAndRender();
     }
 
     function syncFromRaw(){
