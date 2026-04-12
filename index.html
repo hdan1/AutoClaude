@@ -191,7 +191,7 @@ body{margin:0;background:var(--bg);color:var(--tx);font-family:Segoe UI,system-u
 .model-quick:disabled,.effort-quick:disabled{opacity:0.4;cursor:not-allowed}
 .settings-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:209}
 .settings-overlay.show{display:block}
-.settings-panel{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;z-index:210;width:720px;max-width:90vw;height:520px;max-height:85vh;box-shadow:0 8px 32px rgba(0,0,0,.5);overflow:hidden}
+.settings-panel{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;z-index:210;width:860px;max-width:90vw;height:620px;max-height:85vh;box-shadow:0 8px 32px rgba(0,0,0,.5);overflow:hidden}
 .settings-panel.show{display:flex}
 .settings-sidebar{width:170px;border-right:1px solid var(--bdr);padding:12px 0;background:var(--bg);flex-shrink:0;overflow-y:auto}
 .settings-sidebar-label{padding:6px 16px;font-size:11px;color:var(--tx3);text-transform:uppercase;margin-bottom:4px}
@@ -213,7 +213,7 @@ body{margin:0;background:var(--bg);color:var(--tx);font-family:Segoe UI,system-u
 /* Claude Code Manager Modal */
 .ccm-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:310}
 .ccm-overlay.show{display:block}
-.ccm-modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg);border:1px solid var(--bdr);border-radius:10px;z-index:311;width:900px;max-width:92vw;height:700px;max-height:90vh;box-shadow:0 12px 40px rgba(0,0,0,.6);overflow:hidden;flex-direction:column}
+.ccm-modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg);border:1px solid var(--bdr);border-radius:10px;z-index:311;width:1000px;max-width:92vw;height:780px;max-height:90vh;box-shadow:0 12px 40px rgba(0,0,0,.6);overflow:hidden;flex-direction:column}
 .ccm-modal.show{display:flex}
 .ccm-header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--bdr)}
 .ccm-header h3{margin:0;font-size:14px;font-weight:600;color:var(--tx)}
@@ -285,6 +285,18 @@ body{margin:0;background:var(--bg);color:var(--tx);font-family:Segoe UI,system-u
 .ccm-json-status.invalid{color:var(--red)}
 /* Raw editor */
 .ccm-editor-area{width:100%;min-height:300px;background:var(--bg);border:1px solid var(--bdr);border-radius:6px;font-family:'Cascadia Code','Fira Code','JetBrains Mono',monospace;font-size:12px;line-height:20px;color:var(--tx);padding:12px;resize:vertical;tab-size:2;box-sizing:border-box}
+.ccm-editor-wrap{display:flex;flex:1;overflow:hidden;position:relative;border:1px solid var(--bdr);border-radius:6px;background:var(--bg)}
+.ccm-line-gutter{width:48px;padding:12px 8px 12px 0;text-align:right;font-family:'Cascadia Code','Fira Code','JetBrains Mono',monospace;font-size:12px;line-height:20px;color:var(--tx2);overflow:hidden;user-select:none;flex-shrink:0;background:rgba(0,0,0,.15);border-right:1px solid var(--bdr)}
+.ccm-editor-container{position:relative;flex:1;overflow:hidden}
+.ccm-editor-area-v2{position:absolute;top:0;left:0;width:100%;height:100%;font-family:'Cascadia Code','Fira Code','JetBrains Mono',monospace;font-size:12px;line-height:20px;padding:12px;margin:0;border:none;background:transparent;color:transparent;caret-color:var(--tx);resize:none;tab-size:2;box-sizing:border-box;white-space:pre;overflow:auto;z-index:2;outline:none}
+.ccm-highlight-overlay{position:absolute;top:0;left:0;width:100%;height:100%;font-family:'Cascadia Code','Fira Code','JetBrains Mono',monospace;font-size:12px;line-height:20px;padding:12px;margin:0;border:none;white-space:pre;overflow:hidden;pointer-events:none;box-sizing:border-box;z-index:1;color:var(--tx)}
+.json-key{color:#7dcfff}
+.json-string{color:#9ece6a}
+.json-number{color:#ff9e64}
+.json-bool,.json-null{color:#bb9af7}
+.json-brace{color:var(--tx2)}
+.json-error-line{background:rgba(255,50,50,.15);display:inline}
+.json-bracket-match{outline:1px solid rgba(125,207,255,.5);border-radius:2px}
 /* Accordion sections */
 .ccm-section{border:1px solid var(--bdr);border-radius:6px;margin-bottom:8px;overflow:hidden}
 .ccm-section-header{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg2);cursor:pointer;user-select:none}
