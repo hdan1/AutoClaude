@@ -647,8 +647,8 @@ app.whenReady().then(async () => {
         logger.info('app', `Auto-update error: ${err.message}`);
       });
       if (config.system?.autoUpdate !== false) {
-        autoUpdater.checkForUpdatesAndNotify().catch(err => {
-          logger.info('app', `Auto-update check failed: ${err.message}`);
+        autoUpdater.checkForUpdatesAndNotify().catch(() => {
+          // Errors already handled by autoUpdater.on('error') above
         });
       }
     } catch (err) {
