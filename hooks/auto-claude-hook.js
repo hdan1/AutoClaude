@@ -9,7 +9,27 @@ const path = require('path');
 
 // L2: Use shared summarize function (deduplicated)
 // Note: This file runs in the target project's cwd, so we need absolute path to our module
-const summarize = require(path.join(__dirname, '..', 'lib', 'summarize'));
+// Fall back to inline implementation when running from extraResources (lib/ not available)
+let summarize;
+try {
+  summarize = require(path.join(__dirname, '..', 'lib', 'summarize'));
+} catch {
+  summarize = function(toolName, input) {
+    if (!input) return '';
+    try {
+      const n = (toolName || '').toLowerCase();
+      if (n === 'bash') return input.command ? `$ ${(input.command || '').substring(0, 120)}` : '';
+      if (n === 'read' || n === 'write' || n === 'edit' || n === 'multiedit' || n === 'multi_edit') return input.file_path || input.path || '';
+      if (n === 'grep') return `"${(input.pattern || input.query || '').substring(0, 60)}"`;
+      if (n === 'glob') return input.pattern || '';
+      if (n === 'task') return (input.description || input.prompt || '').substring(0, 100);
+      if (n === 'webfetch') return input.url || '';
+      const vals = Object.values(input);
+      for (const v of vals) { if (typeof v === 'string' && v.length > 0) return v.substring(0, 100); }
+    } catch { /* non-critical */ }
+    return '';
+  };
+}
 
 const LOG_FILE = path.join(process.cwd(), '.planning', 'auto-claude-hooks.jsonl');
 

@@ -62,6 +62,10 @@
       {
         "from": "lib/runtime-utils.js",
         "to": "lib/runtime-utils.js"
+      },
+      {
+        "from": "lib/summarize.js",
+        "to": "lib/summarize.js"
       }
     ],
     "win": {
