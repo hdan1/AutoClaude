@@ -138,6 +138,7 @@ class ClaudeProxy extends EventEmitter {
       resultText: null,
       error: null,
       exitCode: null,
+      askedQuestion: false,
     };
 
     // Start watching the hook log for subagent activity
@@ -396,6 +397,7 @@ class ClaudeProxy extends EventEmitter {
             if (result.timeline.length > RING_BUFFER_TIMELINE) result.timeline = result.timeline.slice(-RING_BUFFER_TIMELINE);
             this.emit('event', { type: 'tool_use', name: block.name, input: summary, elapsed });
             if (QUESTION_TOOL_NAMES.includes(block.name)) {
+              result.askedQuestion = true;
               this.emit('ask-user-question', { input: block.input, id: block.id, elapsed });
             }
           }

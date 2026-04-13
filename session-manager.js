@@ -271,7 +271,10 @@ class SessionManager extends EventEmitter {
         if (autoNextHistory.length > MAX_HISTORY) autoNextHistory.shift();
 
         session.state.lastAutoNextPrompt = nextAction.prompt;
-        derailmentCount = 0; // Reset derailment counter on successful auto-next
+        // Only reset derailment counter if making real progress (different prompt)
+        if (!lastEntry || lastEntry.prompt !== nextAction.prompt) {
+          derailmentCount = 0;
+        }
         totalCorrections++;
         if (totalCorrections > MAX_TOTAL_CORRECTIONS) {
           this.send(tabId, 'log', { type: 'system', text: `⚠ Total correction limit reached (${totalCorrections} auto-next + derailment corrections) — stopping` });
