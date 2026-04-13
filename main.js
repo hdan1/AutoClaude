@@ -268,7 +268,15 @@ function _wireSessionManagerEvents() {
     logger.info('question-event', `tabId=${tabId} projectDir=${state.projectDir || '(none)'} projectBot=${!!bot} projectBotRunning=${bot?.isRunning} masterBot=${!!masterTelegram} masterBotRunning=${masterTelegram?.isRunning} questionText="${(questionData?.questionText || '').substring(0, 50)}"`);
     if (bot?.isRunning) { bot.forwardQuestion(tabId, questionData); }
     if (masterTelegram?.isRunning) {
-      masterTelegram.forwardQuestion({ tabId, projectDir: state.projectDir, state }, questionData);
+      const resolved = state.projectDir ? path.resolve(state.projectDir) : null;
+      const ptConfig = resolved ? (config.projectTelegram?.[resolved] || {}) : {};
+      masterTelegram.forwardQuestion({
+        tabId,
+        projectDir: state.projectDir,
+        state,
+        projectBotUsername: bot?.botUsername || null,
+        masterNotifyMode: ptConfig.masterNotifyMode || 'full',
+      }, questionData);
     }
   });
   sessionManager.on('output', ({ tabId, text }) => {
@@ -1364,7 +1372,7 @@ ipcMain.handle('save-telegram-config', withTrustedIpc('save-telegram-config', as
   const resolved = path.resolve(projectDir);
 
   // Validate config
-  const result = validateProjectTelegramConfig({ enabled: !!c.enabled, allowedUsers: c.allowedUsers || [] });
+  const result = validateProjectTelegramConfig({ enabled: !!c.enabled, allowedUsers: c.allowedUsers || [], masterNotifyMode: c.masterNotifyMode });
   if (!result.ok) return { ok: false, error: result.error };
 
   // Check token distinctness against master
@@ -1382,6 +1390,7 @@ ipcMain.handle('save-telegram-config', withTrustedIpc('save-telegram-config', as
   config.projectTelegram[resolved] = {
     enabled: result.config.enabled,
     allowedUsers: result.config.allowedUsers,
+    masterNotifyMode: result.config.masterNotifyMode,
   };
   saveConfig(config);
 
@@ -1412,7 +1421,7 @@ ipcMain.handle('save-telegram-config', withTrustedIpc('save-telegram-config', as
 
 ipcMain.handle('load-telegram-config', withTrustedIpc('load-telegram-config', async (event, c) => {
   const projectDir = c?.projectDir;
-  if (!projectDir) return { enabled: false, hasToken: false, allowedUsers: [], encryptionAvailable: isEncryptionAvailable() };
+  if (!projectDir) return { enabled: false, hasToken: false, allowedUsers: [], masterNotifyMode: 'full', encryptionAvailable: isEncryptionAvailable() };
   const resolved = path.resolve(projectDir);
   const ptConfig = config.projectTelegram?.[resolved] || {};
   const hasToken = !!loadProjectToken(app.getPath('userData'), resolved);
@@ -1420,9 +1429,10 @@ ipcMain.handle('load-telegram-config', withTrustedIpc('load-telegram-config', as
     enabled: ptConfig.enabled || false,
     hasToken,
     allowedUsers: ptConfig.allowedUsers || [],
+    masterNotifyMode: ptConfig.masterNotifyMode || 'full',
     encryptionAvailable: isEncryptionAvailable(),
   };
-}, trustDeps, { enabled: false, hasToken: false, allowedUsers: [], encryptionAvailable: false }));
+}, trustDeps, { enabled: false, hasToken: false, allowedUsers: [], masterNotifyMode: 'full', encryptionAvailable: false }));
 
 ipcMain.handle('save-master-telegram-config', withTrustedIpc('save-master-telegram-config', async (event, incoming) => {
   const result = validateMasterTelegramConfig(incoming || {});
