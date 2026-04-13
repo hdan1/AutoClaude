@@ -585,6 +585,40 @@ app.whenReady().then(async () => {
   killOrphans();
   createWindow();
 
+  // ── Cleanup corrupted hook entries in global settings ──
+  // GSD installer can leave truncated "node " commands (no script path) due to
+  // race conditions or partial writes. Remove them on startup so they don't
+  // cause silent errors on every tool use.
+  try {
+    const globalSettingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    if (fs.existsSync(globalSettingsPath)) {
+      const gs = JSON.parse(fs.readFileSync(globalSettingsPath, 'utf8'));
+      let cleaned = false;
+      if (gs.hooks) {
+        for (const eventType of Object.keys(gs.hooks)) {
+          if (!Array.isArray(gs.hooks[eventType])) continue;
+          const before = gs.hooks[eventType].length;
+          gs.hooks[eventType] = gs.hooks[eventType].filter(entry => {
+            if (!entry.hooks || !Array.isArray(entry.hooks)) return false;
+            // Remove entries where ALL hook commands are empty/whitespace-only
+            const hasValidCommand = entry.hooks.some(h =>
+              h.command && h.command.trim().length > 0 && !/^(node|bash|sh)\s*$/.test(h.command.trim())
+            );
+            return hasValidCommand;
+          });
+          if (gs.hooks[eventType].length < before) cleaned = true;
+          if (gs.hooks[eventType].length === 0) { delete gs.hooks[eventType]; cleaned = true; }
+        }
+      }
+      if (cleaned) {
+        fs.writeFileSync(globalSettingsPath, JSON.stringify(gs, null, 2), 'utf8');
+        logger.info('startup', 'Cleaned up corrupted hook entries in global settings.json');
+      }
+    }
+  } catch (err) {
+    logger.debug('startup', `Settings cleanup skipped: ${err.message}`);
+  }
+
   // ── Startup Health Check ──────────────────────────
   setTimeout(async () => {
     try {
@@ -840,7 +874,10 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   // Suppress auto-update 404s — already logged by autoUpdater.on('error')
   const msg = String(reason?.message || reason || '');
-  if (msg.includes('releases.atom') || msg.includes('auto-update')) return;
+  if (msg.includes('releases.atom') || msg.includes('auto-update') ||
+      msg.includes('HttpError') || msg.includes('404') ||
+      msg.includes('electron-updater') || msg.includes('provider') ||
+      msg.includes('Cannot find latest.yml') || msg.includes('net::ERR_')) return;
   logger.error('app', 'Unhandled rejection', reason);
 });
 

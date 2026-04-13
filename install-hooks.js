@@ -7,7 +7,40 @@
 
 const fs = require('fs');
 const path = require('path');
-const { safeWriteFileAtomic, backupFileBeforeWrite } = require('./lib/runtime-utils');
+
+// Try to load from lib/runtime-utils (works in dev and when extraResources includes lib/)
+// Fall back to inline implementations if the module isn't available (e.g., older packaged builds)
+let safeWriteFileAtomic, backupFileBeforeWrite;
+try {
+  ({ safeWriteFileAtomic, backupFileBeforeWrite } = require('./lib/runtime-utils'));
+} catch {
+  // Inline fallbacks — same logic as runtime-utils.js
+  safeWriteFileAtomic = function({ filePath, content, fs: fsMod }) {
+    const tmpPath = filePath + '.tmp';
+    try {
+      fsMod.writeFileSync(tmpPath, content, 'utf8');
+      try {
+        fsMod.renameSync(tmpPath, filePath);
+      } catch (renameErr) {
+        try { fsMod.unlinkSync(tmpPath); } catch { /* best-effort cleanup */ }
+        return { ok: false, error: renameErr?.message || String(renameErr) };
+      }
+      return { ok: true };
+    } catch (writeErr) {
+      return { ok: false, error: writeErr?.message || String(writeErr) };
+    }
+  };
+  backupFileBeforeWrite = function({ filePath, fs: fsMod }) {
+    if (!fsMod.existsSync(filePath)) return { ok: false, error: 'Source file does not exist' };
+    const backupPath = filePath + '.bak';
+    try {
+      fsMod.copyFileSync(filePath, backupPath);
+      return { ok: true, backupPath };
+    } catch (err) {
+      return { ok: false, error: err?.message || String(err) };
+    }
+  };
+}
 
 const projectDir = process.argv[2];
 const uninstall = process.argv.includes('--uninstall');

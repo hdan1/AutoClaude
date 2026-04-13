@@ -22,11 +22,11 @@ class SessionManager extends EventEmitter {
         const isRunning = session?.telegramBridge?.isRunning;
         const chatCount = session?.telegramBridge?.chatIds?.size || 0;
         const logger = require('./lib/logger');
-        if (!session) logger.info('tg-debug', 'No session for ' + tabId);
-        else if (!hasBridge) logger.info('tg-debug', 'No telegramBridge on session ' + tabId);
-        else if (!isRunning) logger.info('tg-debug', 'telegramBridge not running for ' + tabId);
-        else if (chatCount === 0) logger.info('tg-debug', 'telegramBridge running but 0 chatIds for ' + tabId);
-        else logger.info('tg-debug', 'Forwarding log to ' + chatCount + ' chats for ' + tabId);
+        if (!session) logger.debug('tg-debug', 'No session for ' + tabId);
+        else if (!hasBridge) logger.debug('tg-debug', 'No telegramBridge on session ' + tabId);
+        else if (!isRunning) logger.debug('tg-debug', 'telegramBridge not running for ' + tabId);
+        else if (chatCount === 0) logger.debug('tg-debug', 'telegramBridge running but 0 chatIds for ' + tabId);
+        else logger.debug('tg-debug', 'Forwarding log to ' + chatCount + ' chats for ' + tabId);
       }
       if (session?.telegramBridge?.isRunning) {
         if (channel === 'log' && data?.text) {

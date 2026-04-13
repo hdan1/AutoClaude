@@ -58,6 +58,10 @@
       {
         "from": "hooks/auto-claude-hook.js",
         "to": "hooks/auto-claude-hook.js"
+      },
+      {
+        "from": "lib/runtime-utils.js",
+        "to": "lib/runtime-utils.js"
       }
     ],
     "win": {
