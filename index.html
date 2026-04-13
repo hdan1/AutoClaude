@@ -913,7 +913,8 @@ function wirePanel(tabId){
         if(c.enabled)tgToggle.classList.add('on');else tgToggle.classList.remove('on');
         tgToken.value='';tgToken.placeholder=c.hasToken?'(saved — enter new to change)':'Bot token from @BotFather';
         tgAllowed.value=(c.allowedUsers||[]).join(', ');
-        tgMasterNotify.value=(c.masterNotifyMode||'full');
+        const loadedMasterNotifyMode=((c.masterNotifyMode==='full'||c.masterNotifyMode==='ping'||c.masterNotifyMode==='off')?c.masterNotifyMode:'full');
+        tgMasterNotify.value=loadedMasterNotifyMode;
       });
     }
   };
