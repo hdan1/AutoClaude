@@ -66,6 +66,8 @@ class SessionManager extends EventEmitter {
         skillSource: null,
         // Cumulative project-level stats (persisted across sessions)
         projectInputTokens: 0, projectOutputTokens: 0, projectCostUsd: 0, projectSessions: 0,
+        // Last known turn context metrics (for UI continuity across reload/state refresh)
+        turnInputTokens: 0, contextWindow: contextGuard.getContextWindow(null, null, null),
       },
       telegramBridge: null,
       pendingResponse: null,
@@ -535,6 +537,9 @@ class SessionManager extends EventEmitter {
         augmented.turnInputTokens = m.inputTokens;
         const guard = this.config.contextGuard || {};
         augmented.contextWindow = contextGuard.getContextWindow(session.state.model, guard.contextWindowOverride, null);
+        // Persist latest values so renderer reload/state refresh can restore context indicator
+        session.state.turnInputTokens = augmented.turnInputTokens;
+        session.state.contextWindow = augmented.contextWindow;
       }
       // Include project-level cumulative stats
       augmented.projectInputTokens = session.state.projectInputTokens + augmented.inputTokens;
