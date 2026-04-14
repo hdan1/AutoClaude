@@ -629,6 +629,14 @@ function panelHTML(tabId){
       <input type="password" data-el="tgTabToken" placeholder="Bot token from @BotFather" autocomplete="off" style="flex:1;font-size:11px">
       <input type="text" data-el="tgTabAllowed" placeholder="allowed users (comma-sep)" autocomplete="off" style="flex:1;font-size:11px">
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="color:var(--tx2);font-size:12px">Master notifications</span>
+      <select data-el="tgMasterNotify" style="height:24px;background:var(--bg2);color:var(--tx);border:1px solid var(--bdr);border-radius:6px;padding:0 6px;font-size:11px">
+        <option value="full">Full details</option>
+        <option value="ping">Ping only</option>
+        <option value="off">Off</option>
+      </select>
+    </div>
     <div class="tg-status" data-el="tgTabStatus" style="display:none"></div>
     <div class="tutor-chat-list" data-el="tgTabChatList" style="display:none"></div>
     <div style="display:flex;gap:6px;margin-top:4px">
@@ -895,7 +903,7 @@ function wirePanel(tabId){
     window.api.setSetting('autoAnswer.derailmentCorrection',mode==='full'||mode==='review');
   };
   // Per-tab Telegram bot config
-  const tgPanel=el('tgTabPanel'),tgToggle=el('tgTabEnabled'),tgToken=el('tgTabToken'),tgAllowed=el('tgTabAllowed');
+  const tgPanel=el('tgTabPanel'),tgToggle=el('tgTabEnabled'),tgToken=el('tgTabToken'),tgAllowed=el('tgTabAllowed'),tgMasterNotify=el('tgMasterNotify');
   const tgSaveBtn=el('tgTabSave'),tgTestBtn=el('tgTabTest'),tgDiscoverBtn=el('tgTabDiscover');
   const tgTabStatus=el('tgTabStatus'),tgTabChatList=el('tgTabChatList');
   el('btnTabTelegram').onclick=()=>{if(!ts.projectDir)return;
@@ -905,13 +913,15 @@ function wirePanel(tabId){
         if(c.enabled)tgToggle.classList.add('on');else tgToggle.classList.remove('on');
         tgToken.value='';tgToken.placeholder=c.hasToken?'(saved — enter new to change)':'Bot token from @BotFather';
         tgAllowed.value=(c.allowedUsers||[]).join(', ');
+        const loadedMasterNotifyMode=((c.masterNotifyMode==='full'||c.masterNotifyMode==='ping'||c.masterNotifyMode==='off')?c.masterNotifyMode:'full');
+        tgMasterNotify.value=loadedMasterNotifyMode;
       });
     }
   };
   tgToggle.onclick=function(){this.classList.toggle('on')};
   tgSaveBtn.onclick=async()=>{
     if(!ts.projectDir){showTgTabStatus('Select a project first','err');return}
-    const cfg={projectDir:ts.projectDir,enabled:tgToggle.classList.contains('on'),allowedUsers:tgAllowed.value.split(',').map(s=>s.trim()).filter(Boolean)};
+    const cfg={projectDir:ts.projectDir,enabled:tgToggle.classList.contains('on'),allowedUsers:tgAllowed.value.split(',').map(s=>s.trim()).filter(Boolean),masterNotifyMode:tgMasterNotify.value};
     if(tgToken.value.trim())cfg.botToken=tgToken.value.trim();
     const r=await window.api.saveTelegramConfig(cfg);
     if(r.ok){showTgTabStatus('Saved','ok');tgToken.value='';tgToken.placeholder='(saved — enter new to change)'}
