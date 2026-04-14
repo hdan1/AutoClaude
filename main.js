@@ -1013,12 +1013,12 @@ ipcMain.handle('start-session', async (event, o) => {
   // o.sessionId is set when user has a session selected in the dropdown;
   // it's undefined when "New session" is selected (value="" → ||undefined).
   if (existing && existing.state.sessionId) {
-    if (!o.sessionId) {
-      // "New session" selected in dropdown → clear stale session, start fresh
+    if (o.sessionSelectionTouched && !o.sessionId) {
+      // Explicit "New session" selected in dropdown → clear stale session, start fresh
       existing.state.sessionId = null;
     } else {
-      // Session selected in dropdown → continue it (switch if different)
-      if (o.sessionId !== existing.state.sessionId) {
+      // Keep existing session unless an explicit session was selected in dropdown
+      if (o.sessionId && o.sessionId !== existing.state.sessionId) {
         existing.state.sessionId = o.sessionId;
       }
       existing.state.running = false;

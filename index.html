@@ -596,7 +596,7 @@ let activeTabId=null;
 const $=id=>document.getElementById(id);
 window.api.getAppVersion().then(v=>{$('appVersion').textContent='v'+v});
 function $t(tabId,sel){const p=document.querySelector(`.tp[data-tab-id="${tabId}"]`);return p?p.querySelector(`[data-el="${sel}"]`):null}
-function createTabState(tabId){return {tabId,projectDir:'',loopStart:null,eTmr:null,started:false,autoScroll:true,totalTools:0,totalSubTools:0,currentModel:'',sessionTokensIn:0,sessionTokensOut:0,lastToolLine:null,initLogged:false,cmdPickerIdx:-1,logBuffer:[],logFlushScheduled:false,activityType:'idle',activeTool:null,gsdPhase:null,activeSkill:null,skillSource:null,questionActive:false,activityDebounceTimer:null,pendingActivity:null,projectAlias:'',ttftHistory:[],tokenSnapshots:[],toolTimeline:[],responseTimes:[],lastToolResultAt:null,turnInputTokens:0,contextWindow:0,sessionPreviewById:{},_countdownTimer:null,attachedImages:[]}}
+function createTabState(tabId){return {tabId,projectDir:'',loopStart:null,eTmr:null,started:false,autoScroll:true,totalTools:0,totalSubTools:0,currentModel:'',sessionTokensIn:0,sessionTokensOut:0,lastToolLine:null,initLogged:false,cmdPickerIdx:-1,logBuffer:[],logFlushScheduled:false,activityType:'idle',activeTool:null,gsdPhase:null,activeSkill:null,skillSource:null,questionActive:false,activityDebounceTimer:null,pendingActivity:null,projectAlias:'',ttftHistory:[],tokenSnapshots:[],toolTimeline:[],responseTimes:[],lastToolResultAt:null,turnInputTokens:0,contextWindow:0,sessionPreviewById:{},sessionSelectionTouched:false,_countdownTimer:null,attachedImages:[]}}
 
 function panelHTML(tabId){
   return `<div class="tp" data-tab-id="${tabId}">
@@ -854,7 +854,7 @@ async function closeTab(tabId){
 
 function selectProjectForTab(tabId,name,fullPath){
   const ts=tabs.get(tabId);if(!ts)return;
-  ts.projectDir=fullPath;ts.projectAlias=name;
+  ts.projectDir=fullPath;ts.projectAlias=name;ts.sessionSelectionTouched=false;
   const btn=$t(tabId,'btnProject');
   if(btn)btn.textContent=name+' \u25BE';
   const lbl=document.querySelector(`.t[data-tab-id="${tabId}"] .tl`);
@@ -868,7 +868,7 @@ function wirePanel(tabId){
   const ts=tabs.get(tabId);if(!ts)return;
   const el=s=>$t(tabId,s);
   const sel=el('sessionSelect');
-  if(sel)sel.onchange=()=>applySelectedSessionPreview(tabId);
+  if(sel)sel.onchange=()=>{ts.sessionSelectionTouched=true;applySelectedSessionPreview(tabId)};
   el('btnProject').onclick=async()=>{
     const pk=el('projectPicker');
     if(pk.classList.contains('vis')){pk.classList.remove('vis');return}
@@ -950,6 +950,7 @@ function wirePanel(tabId){
     if(!ts.projectDir){el('btnProject').style.borderColor='var(--red)';setTimeout(()=>el('btnProject').style.borderColor='',1500);return}
     let prompt=el('promptInput').value.trim();
     const sid=el('sessionSelect').value||undefined;
+    const sessionSelectionTouched=ts.sessionSelectionTouched===true;
     const isResume=ts.sessionTokensIn>0||ts.sessionTokensOut>0;
     if(!prompt&&!sid&&!isResume){el('promptInput').style.borderColor='var(--red)';el('promptInput').placeholder='A prompt is required for new sessions';
       setTimeout(()=>{el('promptInput').style.borderColor='';el('promptInput').placeholder='Enter your prompt or type / for commands... (Ctrl+Enter to start)'},2000);return}
@@ -974,7 +975,8 @@ function wirePanel(tabId){
       ts.initLogged=false;ts.lastToolResultAt=null;
     }
     startElapsedForTab(tabId);
-    window.api.startSession(tabId,{projectDir:ts.projectDir,prompt,sessionId:sid});
+    window.api.startSession(tabId,{projectDir:ts.projectDir,prompt,sessionId:sid,sessionSelectionTouched});
+    ts.sessionSelectionTouched=false;
     el('btnStart').disabled=true;el('btnStart').innerHTML='&#9654; Start Session';el('btnStop').disabled=false;el('btnProject').disabled=true;el('sessionSelect').disabled=true;
     el('quickModel').disabled=true;el('quickEffort').disabled=true;
     const rb=el('resumeBanner');if(rb)rb.classList.remove('vis');
@@ -1118,7 +1120,7 @@ function wirePanel(tabId){
   const freshBtn=el('btnFresh');
   const banner=el('resumeBanner');
   if(resumeBtn)resumeBtn.onclick=()=>{banner.classList.remove('vis');el('btnStart').click()};
-  if(freshBtn)freshBtn.onclick=async()=>{banner.classList.remove('vis');if(ts.projectDir)await window.api.clearStoredSession(ts.projectDir);const sel2=el('sessionSelect');if(sel2)sel2.value=''};
+  if(freshBtn)freshBtn.onclick=async()=>{banner.classList.remove('vis');if(ts.projectDir)await window.api.clearStoredSession(ts.projectDir);const sel2=el('sessionSelect');if(sel2)sel2.value='';ts.sessionSelectionTouched=true;applySelectedSessionPreview(tabId)};
 
   // ── Image Attachment Handling ──────────────────────
   const attachBtn=el('attachBtn'), attachInput=el('attachInput'), attachPreview=el('attachPreview');
@@ -1247,6 +1249,7 @@ function startElapsedForTab(tabId){const ts=tabs.get(tabId);if(!ts)return;if(ts.
 function resetCtrlForTab(tabId){const ts=tabs.get(tabId);if(!ts)return;ts.started=false;const el=s=>$t(tabId,s);const b=el('btnStart');if(b){b.disabled=false;const hasSession=ts.sessionTokensIn>0||ts.sessionTokensOut>0;b.innerHTML=hasSession?'&#9654; Resume Session':'&#9654; Start Session'}const s=el('btnStop');if(s)s.disabled=true;const br=el('btnProject');if(br)br.disabled=false;const ss=el('sessionSelect');if(ss)ss.disabled=false;const qm=el('quickModel');if(qm)qm.disabled=false;const qe=el('quickEffort');if(qe)qe.disabled=false;const pi=el('promptInput');if(pi){pi.placeholder='Enter your prompt or type / for commands... (Ctrl+Enter to start)';window.api.getSetting('defaultPrompt').then(p=>{if(p&&!pi.value)pi.value=p})};if(ts.eTmr){clearInterval(ts.eTmr);ts.eTmr=null}}
 
 async function populateSessionsForTab(tabId,dir){
+  const ts=tabs.get(tabId);if(!ts)return;
   const sel=$t(tabId,'sessionSelect');if(!sel)return;
   sel.innerHTML='<option value="">New session</option>';if(!dir)return;
   try{const sessions=await window.api.listSessions(dir);ts.sessionPreviewById={};
