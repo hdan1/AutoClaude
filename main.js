@@ -29,6 +29,8 @@ const {
   isTrustedIpcSender,
   applyCustomProviderToSettings,
   enrichDetectionWithCustomProviderSecret,
+  isExpectedAutoUpdateFeed404,
+  summarizeAutoUpdateError,
 } = require('./lib/runtime-utils');
 const {
   saveToken,
@@ -235,12 +237,12 @@ function getProjectBot(projectDir) {
 }
 
 async function startProjectBot(projectDir) {
-  if (!projectDir) { logger.info('tg-debug', 'startProjectBot: no projectDir'); return null; }
+  if (!projectDir) { logger.debug('tg-debug', 'startProjectBot: no projectDir'); return null; }
   const resolved = path.resolve(projectDir);
   const existing = projectTelegramBots.get(resolved);
-  if (existing?.isRunning) { logger.info('tg-debug', 'startProjectBot: existing bot running, chatIds: ' + existing.chatIds.size); return existing; }
+  if (existing?.isRunning) { logger.debug('tg-debug', 'startProjectBot: existing bot running, chatIds: ' + existing.chatIds.size); return existing; }
   const ptConfig = config.projectTelegram?.[resolved];
-  if (!ptConfig?.enabled) { logger.info('tg-debug', 'startProjectBot: not enabled for ' + path.basename(resolved) + ', keys: ' + Object.keys(config.projectTelegram || {}).join(',')); return null; }
+  if (!ptConfig?.enabled) { logger.debug('tg-debug', 'startProjectBot: not enabled for ' + path.basename(resolved) + ', keys: ' + Object.keys(config.projectTelegram || {}).join(',')); return null; }
   const token = loadProjectToken(app.getPath('userData'), resolved);
   if (!token) { logger.info('telegram', `No saved token for project: ${path.basename(resolved)}`); return null; }
   // Prevent duplicate token conflict with master bot
@@ -684,7 +686,12 @@ app.whenReady().then(async () => {
         send('update-status', { status: 'ready', version: info.version });
       });
       autoUpdater.on('error', (err) => {
-        logger.info('app', `Auto-update error: ${err.message}`);
+        const summary = summarizeAutoUpdateError(err);
+        if (isExpectedAutoUpdateFeed404(err)) {
+          logger.debug('app', `Auto-update feed unavailable (expected 404): ${summary}`);
+          return;
+        }
+        logger.warn('app', `Auto-update error: ${summary}`);
       });
       if (config.system?.autoUpdate !== false) {
         autoUpdater.checkForUpdatesAndNotify().catch(() => {

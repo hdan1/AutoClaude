@@ -8,6 +8,8 @@ const contextGuard = require('./lib/context-guard');
 const logger = require('./lib/logger');
 const { extractQuestions } = require('./lib/question-utils');
 
+const QUESTION_ROUTING_LOG_THROTTLE_MS = 1000;
+
 class SessionManager extends EventEmitter {
   constructor(globalConfig, sendFn, workflowManager) {
     super();
@@ -42,6 +44,7 @@ class SessionManager extends EventEmitter {
     };
     this.sessions = new Map();
     this.autonomy = new AutonomyEngine(globalConfig, workflowManager);
+    this._lastQuestionRoutingLog = new Map();
   }
 
   setTelegram(tabId, bridge) {
@@ -447,6 +450,7 @@ class SessionManager extends EventEmitter {
     const projectPath = session.state.projectDir || '';
     await this.stop(tabId);
     this.sessions.delete(tabId);
+    this._lastQuestionRoutingLog.delete(tabId);
     return {
       ok: true,
       tabId,
@@ -604,7 +608,14 @@ class SessionManager extends EventEmitter {
       const decision = this.autonomy.handleQuestion(tabId, questionData, session.telegramBridge);
       const hasBridge = !!session.telegramBridge;
       const bridgeRunning = session.telegramBridge?.isRunning;
-      logger.info('question-routing', `tabId=${tabId} decision=${decision.action} hasBridge=${hasBridge} bridgeRunning=${bridgeRunning} question="${(questionText || '').substring(0, 50)}" options=${(options || []).length} cfgAutoAnswer=${!!this.config?.autoAnswer} mode=${this.config?.autoAnswer?.mode} fullAutonomy=${this.config?.autoAnswer?.fullAutonomy}`);
+      const questionPreview = (questionText || '').substring(0, 50);
+      const routingMsg = `tabId=${tabId} decision=${decision.action} hasBridge=${hasBridge} bridgeRunning=${bridgeRunning} question="${questionPreview}" options=${(options || []).length} cfgAutoAnswer=${!!this.config?.autoAnswer} mode=${this.config?.autoAnswer?.mode} fullAutonomy=${this.config?.autoAnswer?.fullAutonomy}`;
+      const nowMs = this._now();
+      const last = this._lastQuestionRoutingLog.get(tabId);
+      if (!last || last.msg !== routingMsg || (nowMs - last.ts) >= QUESTION_ROUTING_LOG_THROTTLE_MS) {
+        logger.info('question-routing', routingMsg);
+        this._lastQuestionRoutingLog.set(tabId, { msg: routingMsg, ts: nowMs });
+      }
 
       if (decision.action === 'auto-answer') {
         if (questionText) this.send(tabId, 'log', { type: 'auto-answer', text: `Q: ${questionText}` });
@@ -822,6 +833,8 @@ class SessionManager extends EventEmitter {
   }
 
   _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  _now() { return Date.now(); }
 
   // Simple hash of the last ~500 chars of output for loop detection.
   // Different output = making progress; identical output = stuck.
