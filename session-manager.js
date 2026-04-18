@@ -176,7 +176,18 @@ class SessionManager extends EventEmitter {
             : CRASH_RETRY_DELAY_MS;
           await this._sleep(delay);
           if (!session.state.running) return;
-          turnPrompt = 'continue';
+
+          // If a question was auto-answered right before the crash,
+          // replay that answer instead of losing it on retry.
+          if (session.pendingResponse) {
+            const answerMatch = session.pendingResponse.match(/I choose: (.+)$/);
+            const shortAnswer = answerMatch ? answerMatch[1] : session.pendingResponse.substring(0, 80);
+            this.send(tabId, 'log', { type: 'system', text: `Replaying pending answer after crash: ${shortAnswer}` });
+            turnPrompt = session.pendingResponse;
+          } else {
+            turnPrompt = 'continue';
+          }
+
           turnMode = 'continue';
           turnSessionId = session.state.sessionId;
           continue;

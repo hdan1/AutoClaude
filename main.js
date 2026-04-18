@@ -96,6 +96,37 @@ function saveConfig(c) {
   settingsDb.syncFromConfigObject(c);
 }
 
+function applyConfigInPlace(nextConfig) {
+  const normalized = (nextConfig && typeof nextConfig === 'object') ? nextConfig : {};
+  for (const key of Object.keys(config)) {
+    if (!(key in normalized)) delete config[key];
+  }
+  Object.assign(config, normalized);
+}
+
+function refreshWorkflowAvailability() {
+  try {
+    const home = claudeDetector.getClaudeHome();
+    const gsdInstalled = claudeDetector.isGsdInstalledFromPaths(home);
+    const pluginData = claudeDetector.listPlugins();
+    const installed = Array.isArray(pluginData?.installed) ? pluginData.installed : [];
+    const superpowersInstalled = installed.some((plugin) => {
+      const name = String(plugin?.name || '').toLowerCase();
+      const key = String(plugin?.key || '').toLowerCase();
+      return (name === 'superpowers' || key.startsWith('superpowers@')) && plugin?.enabled !== false;
+    });
+
+    if (!config.runtime || typeof config.runtime !== 'object') config.runtime = {};
+    config.runtime.workflowAvailability = { gsdInstalled, superpowersInstalled };
+  } catch (err) {
+    logger.warn('workflow-availability', `Failed to refresh availability: ${err.message}`);
+    if (!config.runtime || typeof config.runtime !== 'object') config.runtime = {};
+    if (!config.runtime.workflowAvailability || typeof config.runtime.workflowAvailability !== 'object') {
+      config.runtime.workflowAvailability = {};
+    }
+  }
+}
+
 
 // Initialize logger with persistent user-level log file
 const APP_LOG_FILE = getAppLogFilePath(app.getPath('userData'));
@@ -571,13 +602,14 @@ app.whenReady().then(async () => {
   }
 
   // Build the in-memory config object for backward compat
-  config = settingsDb.buildConfigObject(config);
+  applyConfigInPlace(settingsDb.buildConfigObject(config));
   syncCustomProviderRuntimeEnv();
 
   // Prune stale sessions
   const STALE_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
   settingsDb.pruneSessionsOlderThan(STALE_SESSION_MS);
-  config = settingsDb.buildConfigObject(config); // refresh after pruning
+  applyConfigInPlace(settingsDb.buildConfigObject(config)); // refresh after pruning
+  refreshWorkflowAvailability();
 
   // Create managers with populated config
   workflowManager = new WorkflowManager([
@@ -969,7 +1001,8 @@ ipcMain.handle('select-directory', withTrustedIpc('select-directory', async (eve
   return scoped ? { ok: true, path: selected } : selected;
 }, trustDeps, null));
 ipcMain.handle('load-config', withTrustedIpc('load-config', (event) => {
-  config = settingsDb.buildConfigObject(config);
+  applyConfigInPlace(settingsDb.buildConfigObject(config));
+  refreshWorkflowAvailability();
   return config;
 }, trustDeps, {}));
 ipcMain.handle('get-app-version', () => app.getVersion());
@@ -1171,7 +1204,8 @@ ipcMain.on('save-config', withTrustedIpc('save-config', (event, c) => {
     send('log', { type: 'stderr', text: `Config validation error: ${result.error}` });
     return;
   }
-  config = { ...config, ...result.config };
+  applyConfigInPlace({ ...config, ...result.config });
+  refreshWorkflowAvailability();
   saveConfig(config);
 }, trustDeps));
 
@@ -1182,7 +1216,8 @@ ipcMain.handle('get-setting', withTrustedIpc('get-setting', (event, key) => {
 
 ipcMain.handle('set-setting', withTrustedIpc('set-setting', (event, { key, value }) => {
   settingsDb.set(key, value);
-  config = settingsDb.buildConfigObject(config);
+  applyConfigInPlace(settingsDb.buildConfigObject(config));
+  refreshWorkflowAvailability();
   return { ok: true };
 }, trustDeps));
 
@@ -1573,7 +1608,9 @@ ipcMain.handle('read-claude-settings', withTrustedIpc('read-claude-settings', (e
 ipcMain.handle('write-claude-settings', withTrustedIpc('write-claude-settings', (event, { scope, projectDir, content }) => {
   try {
     const dir = scope === 'project' ? sanitizeClaudeProjectDir(projectDir) : null;
-    return claudeDetector.writeSettingsJson(scope, dir, content);
+    const result = claudeDetector.writeSettingsJson(scope, dir, content);
+    if (result?.ok !== false) refreshWorkflowAvailability();
+    return result;
   } catch (e) { return { ok: false, error: e.message }; }
 }, trustDeps));
 
@@ -1584,12 +1621,20 @@ ipcMain.handle('list-claude-plugins', withTrustedIpc('list-claude-plugins', (eve
 ipcMain.handle('toggle-claude-plugin', withTrustedIpc('toggle-claude-plugin', (event, { pluginKey, enabled }) => {
   const result = claudeDetector.togglePlugin(pluginKey, enabled);
   invalidateHealthCache();
+  if (result?.ok !== false) refreshWorkflowAvailability();
   return result;
 }, trustDeps));
 
 ipcMain.handle('install-claude-plugin', withTrustedIpc('install-claude-plugin', (event, { source, repo }) => {
   const result = claudeDetector.installPlugin(source, repo);
   invalidateHealthCache();
+  if (result && typeof result.then === 'function') {
+    return result.then((resolved) => {
+      if (resolved?.ok !== false) refreshWorkflowAvailability();
+      return resolved;
+    });
+  }
+  if (result?.ok !== false) refreshWorkflowAvailability();
   return result;
 }, trustDeps));
 

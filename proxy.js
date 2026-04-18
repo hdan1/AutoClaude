@@ -823,6 +823,20 @@ class ClaudeProxy extends EventEmitter {
     result.exitCode = classified.exitCode;
     result.resultText = classified.summary;
     if (!classified.ok) result.error = classified.summary;
+
+    // PTY fallback does not stream JSON events, so fullText may be empty.
+    // Build a best-effort text payload from captured stdout/stderr/summary.
+    const ptyText = [classified.stdout, classified.stderr, classified.summary]
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+
+    if (ptyText) {
+      result.fullText = ptyText;
+      // Estimate input tokens from PTY transcript for context guard.
+      // Use 4 chars ≈ 1 token as rough approximation.
+      result.inputTokens = Math.ceil(ptyText.length / 4);
+    }
   }
 
   // CLI -p mode uses hyphens for slash commands (e.g. /gsd-new-project),
