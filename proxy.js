@@ -188,6 +188,13 @@ class ClaudeProxy extends EventEmitter {
       ];
       const spawnEnv = { ...process.env };
       spawnEnv.PATH = extraPaths.join(path.delimiter) + path.delimiter + (spawnEnv.PATH || '');
+      // Detect Java project and inject JAVA_HOME so Gradle builds work without implicit JDK
+      if (fs.existsSync(path.join(projectDir, 'build.gradle')) ||
+          fs.existsSync(path.join(projectDir, 'build.gradle.kts')) ||
+          fs.existsSync(path.join(projectDir, 'pom.xml'))) {
+        const javaHome = process.env.JAVA_HOME || process.env.JAVA_HOME_ALT;
+        if (javaHome) spawnEnv.JAVA_HOME = javaHome;
+      }
       this.process = spawn(claudeBin, args, {
         cwd: projectDir,
         stdio: ['pipe', 'pipe', 'pipe'],

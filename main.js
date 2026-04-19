@@ -920,11 +920,19 @@ process.on('uncaughtException', (err) => {
 });
 process.on('unhandledRejection', (reason) => {
   // Suppress auto-update 404s — already logged by autoUpdater.on('error')
+  // Only suppress known-safe patterns; let other errors surface
   const msg = String(reason?.message || reason || '');
-  if (msg.includes('releases.atom') || msg.includes('auto-update') ||
-      msg.includes('HttpError') || msg.includes('404') ||
+  const isAutoUpdate = msg.includes('releases.atom') || msg.includes('auto-update') ||
       msg.includes('electron-updater') || msg.includes('provider') ||
-      msg.includes('Cannot find latest.yml') || msg.includes('net::ERR_')) return;
+      msg.includes('Cannot find latest.yml') || msg.includes('net::ERR_');
+  // Distinguish expected 404 (generic releases.atom not found) from suspicious ones
+  // (e.g. wrong org/repo URL which needs fixing). Only suppress the former.
+  if (isAutoUpdate) {
+    if (/\b404\b/i.test(msg) && !/\bgithub\.com\/herdanw\b/i.test(msg)) {
+      return; // expected: feed doesn't exist for this repo version
+    }
+    // Non-404 auto-update errors or wrong-repo errors → let through
+  }
   logger.error('app', 'Unhandled rejection', reason);
 });
 

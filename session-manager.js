@@ -613,7 +613,7 @@ class SessionManager extends EventEmitter {
       const nowMs = this._now();
       const last = this._lastQuestionRoutingLog.get(tabId);
       if (!last || last.msg !== routingMsg || (nowMs - last.ts) >= QUESTION_ROUTING_LOG_THROTTLE_MS) {
-        logger.info('question-routing', routingMsg);
+        logger.debug('question-routing', routingMsg);
         this._lastQuestionRoutingLog.set(tabId, { msg: routingMsg, ts: nowMs });
       }
 
