@@ -74,8 +74,8 @@ Run the installer. The app will check for updates automatically on startup.
 ## Install from Source
 
 ```bash
-git clone https://github.com/pinkpixel-dev/auto-claude.git
-cd auto-claude
+git clone https://github.com/herdanw/AutoClaude.git
+cd AutoClaude
 npm install
 npm start
 ```

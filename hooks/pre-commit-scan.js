@@ -24,11 +24,25 @@ const BLOCKED_NAMES = [
 // ── Content patterns (regex + description) ───────
 const CONTENT_PATTERNS = [
   { re: /sk-[a-zA-Z0-9]{20,}/, desc: 'Possible API key (sk-...)' },
+  { re: /sk-ant-[a-zA-Z0-9_-]{20,}/, desc: 'Anthropic API key (sk-ant-...)' },
   { re: /ghp_[a-zA-Z0-9]{36}/, desc: 'GitHub personal access token' },
+  { re: /gho_[a-zA-Z0-9]{36}/, desc: 'GitHub OAuth access token' },
+  { re: /ghu_[a-zA-Z0-9]{36}/, desc: 'GitHub user access token' },
+  { re: /ghs_[a-zA-Z0-9]{36}/, desc: 'GitHub server-to-server token' },
+  { re: /ghr_[a-zA-Z0-9]{36}/, desc: 'GitHub refresh token' },
+  { re: /github_pat_[a-zA-Z0-9_]{82}/, desc: 'GitHub fine-grained PAT' },
   { re: /bot[0-9]{8,}:[A-Za-z0-9_-]{35}/, desc: 'Telegram bot token' },
   { re: /-----BEGIN[A-Z ]*PRIVATE KEY-----/, desc: 'Private key' },
+  { re: /AKIA[0-9A-Z]{16}/, desc: 'AWS access key ID' },
+  { re: /aws_secret_access_key\s*[:=]\s*['"][A-Za-z0-9/+=]{40}['"]/i, desc: 'AWS secret access key' },
+  { re: /AIza[0-9A-Za-z_-]{35}/, desc: 'Google API key' },
+  { re: /ya29\.[0-9A-Za-z_-]{20,}/, desc: 'Google OAuth access token' },
+  { re: /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, desc: 'JWT token (eyJ...)' },
+  { re: /xox[baprs]-[A-Za-z0-9-]{10,}/, desc: 'Slack token' },
+  { re: /https:\/\/hooks\.slack\.com\/services\/T[A-Z0-9]{8,}\/B[A-Z0-9]{8,}\/[A-Za-z0-9]{24}/, desc: 'Slack webhook URL' },
   { re: /password\s*[:=]\s*['"][^'"]{4,}['"]/, desc: 'Hardcoded password' },
   { re: /secret\s*[:=]\s*['"][^'"]{4,}['"]/, desc: 'Hardcoded secret' },
+  { re: /client_secret\s*[:=]\s*['"][^'"]{8,}['"]/i, desc: 'OAuth client_secret' },
 ];
 
 function main() {

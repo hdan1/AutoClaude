@@ -1,0 +1,42 @@
+AUTO CLAUDE DEFAULT PROMPT ANALYSIS
+
+STORAGE (settings-db.js, line 6):
+- Key: 'defaultPrompt'
+- Category: 'session'
+- Type: 'text'
+- Storage: SQLite table 'settings'
+
+UI RENDERING (index.html, lines 851-855):
+- Text input field in Settings panel
+- Category: Session settings
+- Save handler: saveSetting('defaultPrompt', value)
+
+IPC HANDLERS (main.js, lines 770-786):
+- ipcMain.handle('set-setting')
+- ipcMain.handle('get-settings-group')
+- ipcMain.handle('get-settings-schema')
+
+CONFIG LOADING (settings-db.js, lines 256-293):
+- buildConfigObject() reads from SQLite
+- Expands to: config.defaultPrompt = value
+
+SESSION START (session-manager.js, line 103):
+- const effectivePrompt = prompt || this.config.defaultPrompt || fallback
+- Fallback order:
+  1. User-provided prompt (from UI input)
+  2. config.defaultPrompt (from SQLite)
+  3. 'continue' (if resume mode) or '' (error)
+
+CLI ARGUMENTS (proxy.js, lines 124-132):
+- Base args: --output-format stream-json --verbose
+- Add: --dangerously-skip-permissions (if skipPermissions)
+- Add: -r [sessionId] (if resume mode)
+- Add: --continue (if continue mode)
+- Add: -p [prompt] (if options.prompt exists)
+
+SPAWN CALL (proxy.js, line 136):
+- spawn('claude', args, {cwd, stdio, env})
+
+PROMPT NORMALIZATION (proxy.js, lines 494-501):
+- Converts slash commands: /gsd:new-project -> /gsd-new-project
+
