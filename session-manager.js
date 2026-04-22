@@ -4,6 +4,7 @@ const path = require('path');
 const ClaudeProxy = require('./proxy');
 const { TOOL_ACTIVITY_MAP, GSD_PHASE_PATTERNS, CRASH_RETRY_DELAY_MS, QUESTION_TIMEOUT_MS, COST_WARNING_USD, COST_DANGER_USD, REVIEW_COUNTDOWN_SECONDS } = require('./lib/constants');
 const AutonomyEngine = require('./lib/autonomy');
+const TurnLoopController = require('./lib/turn-loop-controller');
 const contextGuard = require('./lib/context-guard');
 const logger = require('./lib/logger');
 const { extractQuestions } = require('./lib/question-utils');
@@ -120,18 +121,7 @@ class SessionManager extends EventEmitter {
     let turnMode = initialMode;
     let turnSessionId = session.state.sessionId;
     let result;
-    let crashRetryCount = 0;
-    let derailmentCount = 0;
-    let contextRecoveryCount = 0;
-    let totalCorrections = 0;         // Combined autoNext + derailment counter (never resets)
-    const MAX_TOTAL_CORRECTIONS = 15; // Hard backstop — prevents any infinite correction loop
-    let totalCrashRetries = 0;        // Session-wide crash counter (never resets)
-    const MAX_SESSION_CRASHES = 10;   // Hard cap on total crash retries per session
-    // Loop detection: sliding window of recent auto-next prompts + output fingerprints
-    const autoNextHistory = []; // { prompt, outputHash }
-    const MAX_HISTORY = 10;
-    const STUCK_THRESHOLD = 3;     // same prompt + same output = truly stuck
-    const OSCILLATION_WINDOW = 8;  // check last N for oscillation (≤2 unique prompts)
+    const loop = new TurnLoopController();
 
     while (session.state.running) {
       session.pendingResponse = null;
@@ -159,91 +149,69 @@ class SessionManager extends EventEmitter {
       session.state.totalCostUsd += result.costUsd || 0;
       if (result.sessionId) session.state.sessionId = result.sessionId;
 
-
-      // Crash retry — non-zero exit code
-      if (result.exitCode && result.exitCode !== 0) {
-        if (this.autonomy.shouldRetry(result.exitCode, result.error, crashRetryCount)) {
-          crashRetryCount++;
-          totalCrashRetries++;
-          if (totalCrashRetries > MAX_SESSION_CRASHES) {
-            this.send(tabId, 'log', { type: 'system', text: `⚠ Session crash limit reached (${totalCrashRetries} total retries) — stopping` });
-            this.emit('notify', { type: 'error', title: 'Auto Claude — Crash Limit', body: `${totalCrashRetries} crashes this session. Stopping.` });
-            break;
-          }
-          const maxR = this.config.resilience?.maxCrashRetries || 3;
-          const msg = `Crash retry ${crashRetryCount}/${maxR} (exit ${result.exitCode})...`;
-          this.send(tabId, 'log', { type: 'system', text: msg });
-          this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Crash Retry', body: msg });
-          const delay = this.config.resilience?.crashRetryDelaySecs
-            ? this.config.resilience.crashRetryDelaySecs * 1000
-            : CRASH_RETRY_DELAY_MS;
-          await this._sleep(delay);
-          if (!session.state.running) return;
-
-          // If a question was auto-answered right before the crash,
-          // replay that answer instead of losing it on retry.
-          if (session.pendingResponse) {
-            const answerMatch = session.pendingResponse.match(/I choose: (.+)$/);
-            const shortAnswer = answerMatch ? answerMatch[1] : session.pendingResponse.substring(0, 80);
-            this.send(tabId, 'log', { type: 'system', text: `Replaying pending answer after crash: ${shortAnswer}` });
-            turnPrompt = session.pendingResponse;
-          } else {
-            turnPrompt = 'continue';
-          }
-
-          turnMode = 'continue';
-          turnSessionId = session.state.sessionId;
-          continue;
+      // Crash retry
+      const crash = loop.checkCrashRetry(this.autonomy, result, this.config);
+      if (crash) {
+        if (crash.action === 'stop') {
+          this.send(tabId, 'log', { type: 'system', text: `\u26a0 ${crash.reason} \u2014 stopping` });
+          this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Crash Limit', body: crash.reason });
+          break;
         }
+        const msg = `Crash retry ${crash.attempt}/${crash.maxRetries} (exit ${crash.exitCode})...`;
+        this.send(tabId, 'log', { type: 'system', text: msg });
+        this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Crash Retry', body: msg });
+        const delay = this.config.resilience?.crashRetryDelaySecs
+          ? this.config.resilience.crashRetryDelaySecs * 1000
+          : CRASH_RETRY_DELAY_MS;
+        await this._sleep(delay);
+        if (!session.state.running) return;
+
+        if (session.pendingResponse) {
+          const answerMatch = session.pendingResponse.match(/I choose: (.+)$/);
+          const shortAnswer = answerMatch ? answerMatch[1] : session.pendingResponse.substring(0, 80);
+          this.send(tabId, 'log', { type: 'system', text: `Replaying pending answer after crash: ${shortAnswer}` });
+          turnPrompt = session.pendingResponse;
+        } else {
+          turnPrompt = 'continue';
+        }
+        turnMode = 'continue';
+        turnSessionId = session.state.sessionId;
+        continue;
       }
-      crashRetryCount = 0;
 
-      // ── Context Guard (CTX-01) ──────────────────────────
-      // Check if context usage exceeds threshold — trigger handoff + fresh session
-      const ctxCheck = contextGuard.shouldRecover(result, session.state.model, this.config, contextRecoveryCount);
-      if (ctxCheck.recover) {
-        contextRecoveryCount++;
-        const pctStr = (ctxCheck.pct * 100).toFixed(0);
-        this.send(tabId, 'log', { type: 'system', text: `\u26a0 Context at ${pctStr}% \u2014 saving state and starting fresh session (${contextRecoveryCount}/${this.config.contextGuard?.maxRecoveriesPerSession || 3})` });
-        this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Context Recovery', body: ctxCheck.reason });
+      // Context recovery
+      const ctx = loop.checkContextRecovery(contextGuard, result, session.state.model, this.config);
+      if (ctx) {
+        const pctStr = (ctx.pct * 100).toFixed(0);
+        this.send(tabId, 'log', { type: 'system', text: `\u26a0 Context at ${pctStr}% \u2014 saving state and starting fresh session (${ctx.count}/${ctx.maxRecoveries})` });
+        this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Context Recovery', body: ctx.reason });
 
-        // Step 1: Handoff turn — save state via workflow-appropriate method
         const handoffPrompt = contextGuard.getHandoffPrompt(session.state);
         this.send(tabId, 'log', { type: 'system', text: `Handoff: ${handoffPrompt.substring(0, 80)}...` });
         session.proxy = new ClaudeProxy(this.config);
         this._wireProxy(tabId, session, session.proxy);
         const handoffResult = await session.proxy.run(session.state.projectDir, {
-          prompt: handoffPrompt,
-          mode: 'continue',
-          sessionId: session.state.sessionId,
+          prompt: handoffPrompt, mode: 'continue', sessionId: session.state.sessionId,
         });
         if (!session.state.running) return;
-        // Accumulate handoff turn tokens
         session.state.totalInputTokens += handoffResult.inputTokens;
         session.state.totalOutputTokens += handoffResult.outputTokens;
         session.state.totalCostUsd += handoffResult.costUsd || 0;
 
-        // Step 2: Clear session — next turn starts fresh
         session.state.sessionId = null;
         this.send(tabId, 'log', { type: 'system', text: '\u2713 Session cleared \u2014 starting fresh with handoff' });
-
-        // Step 3: Resume — set prompt for fresh session
         turnPrompt = contextGuard.getResumePrompt(session.state);
         turnMode = 'fresh';
         turnSessionId = null;
-
-        // Reset loop detection state for the fresh session
-        autoNextHistory.length = 0;
-        derailmentCount = 0;
+        loop.resetForFreshSession();
         session.state.lastAutoNextPrompt = null;
         continue;
       }
 
-      // Auto-answer was set during the turn (by ask-user-question handler)
+      // Auto-answer from question handler
       if (session.pendingResponse) {
-        session.state.lastAutoNextPrompt = null; // Reset loop detection on answer
-        autoNextHistory.length = 0;
-        derailmentCount = 0;
+        session.state.lastAutoNextPrompt = null;
+        loop.resetAfterAnswer();
         const answerMatch = session.pendingResponse.match(/I choose: (.+)$/);
         const shortAnswer = answerMatch ? answerMatch[1] : session.pendingResponse.substring(0, 80);
         this.send(tabId, 'log', { type: 'system', text: `Continuing with answer: ${shortAnswer}` });
@@ -253,79 +221,37 @@ class SessionManager extends EventEmitter {
         continue;
       }
 
-      // Auto-continue: detect GSD phase completion or agent waiting
-      const nextAction = this.autonomy.detectAutoNext(result, session);
-      if (nextAction) {
-        // Progress-aware loop detection using output fingerprinting + sliding window.
-        // Same prompt is fine if output differs (making progress through phases/tests/waves).
-        // Same prompt + same output = truly stuck. Oscillating between 2 prompts = also stuck.
-        const outputHash = this._fingerprint(result.fullText);
-        const entry = { prompt: nextAction.prompt, outputHash };
-
-        // Check 1: Same prompt AND same output = truly stuck (no progress)
-        const lastEntry = autoNextHistory.length > 0 ? autoNextHistory[autoNextHistory.length - 1] : null;
-        if (lastEntry && lastEntry.prompt === entry.prompt && lastEntry.outputHash === entry.outputHash) {
-          const stuckCount = autoNextHistory.filter(h => h.prompt === entry.prompt && h.outputHash === entry.outputHash).length;
-          if (stuckCount >= STUCK_THRESHOLD) {
-            this.send(tabId, 'log', { type: 'system', text: `\u26a0 Loop detected: ${nextAction.prompt} produced identical output ${stuckCount + 1} times \u2014 stopping` });
-            break;
-          }
-        }
-
-        // Check 2: Oscillation detection — last N entries have ≤2 unique prompts
-        if (autoNextHistory.length >= OSCILLATION_WINDOW) {
-          const recent = autoNextHistory.slice(-OSCILLATION_WINDOW).concat(entry);
-          const uniquePrompts = new Set(recent.map(h => h.prompt));
-          if (uniquePrompts.size <= 2) {
-            this.send(tabId, 'log', { type: 'system', text: `\u26a0 Oscillation detected: cycling between ${[...uniquePrompts].join(' \u2194 ')} \u2014 stopping` });
-            break;
-          }
-        }
-
-        // Record this entry
-        autoNextHistory.push(entry);
-        if (autoNextHistory.length > MAX_HISTORY) autoNextHistory.shift();
-
-        session.state.lastAutoNextPrompt = nextAction.prompt;
-        // Only reset derailment counter if making real progress (different prompt)
-        if (!lastEntry || lastEntry.prompt !== nextAction.prompt) {
-          derailmentCount = 0;
-        }
-        totalCorrections++;
-        if (totalCorrections > MAX_TOTAL_CORRECTIONS) {
-          this.send(tabId, 'log', { type: 'system', text: `⚠ Total correction limit reached (${totalCorrections} auto-next + derailment corrections) — stopping` });
-          this.emit('notify', { type: 'error', title: 'Auto Claude — Correction Limit', body: `${totalCorrections} total corrections. Stopping.` });
+      // Auto-next detection
+      const next = loop.checkAutoNext(this.autonomy, result, session);
+      if (next) {
+        if (next.action === 'stop') {
+          this.send(tabId, 'log', { type: 'system', text: `\u26a0 ${next.reason} \u2014 stopping` });
+          this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Loop Detected', body: next.reason });
           break;
         }
-        if (nextAction.delaySecs) {
-          this.send(tabId, 'log', { type: 'system', text: `\u23f3 ${nextAction.reason} \u2014 waiting ${nextAction.delaySecs}s before checking...` });
-          await this._sleep(nextAction.delaySecs * 1000);
+        session.state.lastAutoNextPrompt = next.prompt;
+        if (next.delaySecs) {
+          this.send(tabId, 'log', { type: 'system', text: `\u23f3 ${next.reason} \u2014 waiting ${next.delaySecs}s before checking...` });
+          await this._sleep(next.delaySecs * 1000);
           if (!session.state.running) return;
         }
-        this.send(tabId, 'log', { type: 'system', text: `\u2713 ${nextAction.reason} \u2014 auto-continuing with: ${nextAction.prompt}` });
-        this.emit('notify', { type: 'complete', title: 'Auto Claude \u2014 Phase Complete', body: nextAction.reason });
-        turnPrompt = nextAction.prompt;
+        this.send(tabId, 'log', { type: 'system', text: `\u2713 ${next.reason} \u2014 auto-continuing with: ${next.prompt}` });
+        this.emit('notify', { type: 'complete', title: 'Auto Claude \u2014 Phase Complete', body: next.reason });
+        turnPrompt = next.prompt;
         turnMode = 'continue';
         turnSessionId = session.state.sessionId;
         continue;
       }
 
-      // Derailment detection (with loop protection)
-      const derail = this.autonomy.detectDerailment(result, session);
+      // Derailment detection
+      const derail = loop.checkDerailment(this.autonomy, result, session);
       if (derail) {
-        derailmentCount++;
-        totalCorrections++;
-        const MAX_DERAILMENTS = 3;
-        if (derailmentCount > MAX_DERAILMENTS || totalCorrections > MAX_TOTAL_CORRECTIONS) {
-          this.send(tabId, 'log', { type: 'system', text: `\u26a0 Derailment correction repeated ${derailmentCount} times (${totalCorrections} total corrections) \u2014 pausing for user input` });
+        if (derail.action === 'stop') {
+          this.send(tabId, 'log', { type: 'system', text: `\u26a0 ${derail.reason} \u2014 pausing for user input` });
           this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Derailment Loop', body: 'Repeated corrections failed. Pausing.' });
           break;
         }
-        // Track derailment prompts in autoNextHistory for oscillation detection
-        const outputHash = this._fingerprint(result.fullText);
-        autoNextHistory.push({ prompt: derail.prompt, outputHash });
-        if (autoNextHistory.length > MAX_HISTORY) autoNextHistory.shift();
-        this.send(tabId, 'log', { type: 'system', text: `\u26a0 ${derail.reason} \u2014 redirecting... (${derailmentCount}/${MAX_DERAILMENTS})` });
+        this.send(tabId, 'log', { type: 'system', text: `\u26a0 ${derail.reason} \u2014 redirecting... (${derail.count}/${derail.maxDerailments})` });
         this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Course Correction', body: derail.reason });
         turnPrompt = derail.prompt;
         turnMode = 'continue';
@@ -333,7 +259,7 @@ class SessionManager extends EventEmitter {
         continue;
       }
 
-      // Waiting for user answer (with timeout)
+      // Waiting for user answer
       if (session.waitingForAnswer) {
         const timeoutMs = (this.config.autoAnswer?.questionTimeoutSeconds || 300) * 1000;
         const answered = await this._waitForAnswerWithTimeout(session, timeoutMs);
@@ -348,7 +274,6 @@ class SessionManager extends EventEmitter {
           continue;
         }
         if (!answered) {
-          // Timeout — try auto-answer as fallback
           const fallback = this.autonomy.autoAnswer(session._lastQuestionData, this.config);
           if (fallback) {
             this.send(tabId, 'log', { type: 'system', text: `Question timed out. Auto-answered: ${fallback.answer} (${fallback.reason})` });
@@ -362,12 +287,11 @@ class SessionManager extends EventEmitter {
         }
       }
 
-      // Session error (including zero-token failures like "Unknown skill")
+      // Session error
       if (result.error) {
         this.send(tabId, 'log', { type: 'stderr', text: `Session error: ${result.error}` });
         session.state.message = result.error;
       } else if (result.resultText && result.inputTokens === 0 && result.outputTokens === 0) {
-        // CLI returned a message but did zero work — surface it so user knows what happened
         this.send(tabId, 'log', { type: 'system', text: `CLI result: ${result.resultText}` });
         session.state.message = result.resultText;
       }
@@ -835,18 +759,6 @@ class SessionManager extends EventEmitter {
   _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   _now() { return Date.now(); }
-
-  // Simple hash of the last ~500 chars of output for loop detection.
-  // Different output = making progress; identical output = stuck.
-  _fingerprint(text) {
-    if (!text) return '';
-    const tail = text.length > 500 ? text.slice(-500) : text;
-    let h = 0;
-    for (let i = 0; i < tail.length; i++) {
-      h = ((h << 5) - h + tail.charCodeAt(i)) | 0;
-    }
-    return h.toString(36);
-  }
 
   // ── Project-level cumulative stats ────────────────
 
