@@ -34,7 +34,13 @@ setInterval(async()=>{
   });
 
   async function openModal(){
-    ccState=await window.api.detectClaudeCode();
+    try{
+      const p=window.api.detectClaudeCode();
+      const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),6000));
+      ccState=await Promise.race([p,timeout]);
+    }catch{
+      if(!ccState) ccState={installed:false,authType:null,authDetail:null};
+    }
     overlay.classList.add('show');modal.classList.add('show');
     updateTabs();renderTab();
   }
@@ -42,7 +48,13 @@ setInterval(async()=>{
 
   // Expose function for Setup dialog to open CCM at auth step
   window._ccmOpenAuth=async function(){
-    ccState=await window.api.detectClaudeCode();
+    try{
+      const p=window.api.detectClaudeCode();
+      const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),6000));
+      ccState=await Promise.race([p,timeout]);
+    }catch{
+      if(!ccState) ccState={installed:false,authType:null,authDetail:null};
+    }
     overlay.classList.add('show');modal.classList.add('show');
     activeTab='overview';
     updateTabs();
@@ -72,7 +84,9 @@ setInterval(async()=>{
   // Update badge on startup and periodically
   async function refreshBadge(){
     try{
-      ccState=await window.api.detectClaudeCode();
+      const p=window.api.detectClaudeCode();
+      const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000));
+      ccState=await Promise.race([p,timeout]);
       if(ccState.installed){
         badge.className='cc-badge installed';
         badgeText.textContent='Claude Code v'+(ccState.version||'?');
