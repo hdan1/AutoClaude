@@ -106,6 +106,7 @@ setInterval(async()=>{
       <div class="ccm-card"><div class="ccm-card-label">Path</div><div class="ccm-card-value" style="font-family:monospace;font-size:12px">${esc(ccState.path||'on PATH')}</div></div>
       <div class="ccm-card"><div class="ccm-card-row"><div><div class="ccm-card-label">Auth</div><div class="ccm-card-value">${formatAuth()}</div></div><button class="ccm-link" id="ccmChangeAuth">Change ›</button></div></div>
       <div class="ccm-card" id="ccmUpdateCard"><div class="ccm-card-row"><div><div class="ccm-card-label">Update</div><div class="ccm-card-value" id="ccmUpdateStatus" style="color:var(--tx3)">Checking for updates...</div></div><span id="ccmUpdateAction"></span></div></div>
+      <div class="ccm-card" id="ccmPluginUpdateCard"><div class="ccm-card-label">Plugin Updates</div><div id="ccmPluginUpdateBody" style="color:var(--tx3);font-size:11px">Checking plugins...</div></div>
     `;
     const changeBtn=body.querySelector('#ccmChangeAuth');
     if(changeBtn)changeBtn.onclick=()=>renderAuthStep();
@@ -135,9 +136,11 @@ setInterval(async()=>{
         body.querySelector('#ccmRetryUpdate').onclick=()=>doUpdateCheck(true);
       }
     })();
+    doPluginUpdateCheck(false);
 
     async function doUpdateCheck(force){
       statusEl.textContent='Checking for updates...';statusEl.style.color='var(--tx3)';actionEl.innerHTML='';
+      doPluginUpdateCheck(true);
       try{
         const upd=await window.api.checkClaudeUpdate({forceCheck:force});
         if(upd.updateAvailable){
@@ -173,6 +176,55 @@ setInterval(async()=>{
         statusEl.textContent='Update failed';statusEl.style.color='var(--red)';
         actionEl.innerHTML='<button class="ccm-link" id="ccmRetryUpdate">Retry ›</button>';
         body.querySelector('#ccmRetryUpdate').onclick=()=>doUpdateCheck(true);
+      }
+    }
+
+    async function doPluginUpdateCheck(force){
+      const plugBody=body.querySelector('#ccmPluginUpdateBody');
+      if(!plugBody)return;
+      plugBody.innerHTML='<span style="color:var(--tx3)">Checking plugins...</span>';
+      try{
+        const res=await window.api.checkPluginUpdates({forceRefresh:force});
+        const updates=(res.updates||[]).filter(u=>u.updateAvailable);
+        if(updates.length===0){
+          plugBody.innerHTML='<span style="color:var(--grn)">✓ All plugins up to date</span>';
+          return;
+        }
+        let html='';
+        if(updates.length>1)html+='<div style="margin-bottom:6px"><button class="ccm-btn ccm-btn-primary" style="padding:3px 10px;font-size:10px" id="ccmUpdateAllPlugins">Update All ('+updates.length+')</button></div>';
+        for(const u of updates){
+          const cur=u.currentVersion||'unknown';
+          const lat=u.latestVersion||'?';
+          html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0"><span style="color:var(--ylw)">'+esc(u.name)+' v'+esc(cur)+' → v'+esc(lat)+'</span><button class="ccm-btn ccm-btn-primary" style="padding:2px 8px;font-size:9px" data-update-plugin-key="'+esc(u.key)+'">Update</button></div>';
+        }
+        plugBody.innerHTML=html;
+        // Wire individual update buttons
+        plugBody.querySelectorAll('[data-update-plugin-key]').forEach(btn=>{
+          btn.onclick=async()=>{
+            const key=btn.dataset.updatePluginKey;
+            btn.disabled=true;btn.textContent='Updating...';
+            try{
+              const r=await window.api.updatePlugin({key});
+              if(r.ok){btn.textContent='✓ Updated';btn.style.color='var(--grn)'}
+              else{btn.textContent='Failed';btn.style.color='var(--red)';btn.title=r.error||''}
+            }catch(e){btn.textContent='Error';btn.style.color='var(--red)';btn.title=e.message||''}
+          };
+        });
+        // Wire Update All button
+        const allBtn=plugBody.querySelector('#ccmUpdateAllPlugins');
+        if(allBtn)allBtn.onclick=async()=>{
+          allBtn.disabled=true;allBtn.textContent='Updating all...';
+          try{
+            const keys=updates.map(u=>u.key);
+            const results=await window.api.updateAllPlugins({keys});
+            const failed=results.filter(r=>!r.ok);
+            if(failed.length===0){allBtn.textContent='✓ All updated';allBtn.style.color='var(--grn)'}
+            else{allBtn.textContent=failed.length+' failed';allBtn.style.color='var(--red)';allBtn.title=failed.map(f=>f.key+': '+f.error).join('\n')}
+            doPluginUpdateCheck(true);
+          }catch(e){allBtn.textContent='Error';allBtn.style.color='var(--red)';allBtn.title=e.message||''}
+        };
+      }catch(e){
+        plugBody.innerHTML='<span style="color:var(--red)">Check failed: '+esc(e.message||'unknown error')+'</span>';
       }
     }
   }
@@ -889,25 +941,40 @@ setInterval(async()=>{
 
     search.addEventListener('input',()=>renderList());
 
+    let _pluginUpdates=null;
     async function renderList(){
       const q=(search.value||'').toLowerCase();
       if(pluginView==='installed'){
+        // Fetch update info (cached, non-blocking)
+        if(!_pluginUpdates){
+          window.api.checkPluginUpdates().then(res=>{_pluginUpdates=res.updates||[];renderList()}).catch(()=>{_pluginUpdates=[]});
+        }
+        const updMap={};
+        if(_pluginUpdates)_pluginUpdates.forEach(u=>{if(u.updateAvailable)updMap[u.key]=u});
+
         const filteredPlugins=installed.filter(p=>!q||p.name.toLowerCase().includes(q)||(p.description||'').toLowerCase().includes(q));
         const filteredTools=installedTools.filter(t=>!q||t.name.toLowerCase().includes(q)||(t.description||'').toLowerCase().includes(q)||t.type.toLowerCase().includes(q));
         if(!filteredPlugins.length&&!filteredTools.length){list.innerHTML='<div style="text-align:center;color:var(--tx2);padding:20px;font-size:12px">No plugins or tools found</div>';return}
 
         let installedHtml='';
         if(filteredPlugins.length){
-          installedHtml+=filteredPlugins.map((p,i)=>`
+          installedHtml+=filteredPlugins.map((p,i)=>{
+            const upd=updMap[p.key];
+            const verHtml=upd
+              ?'<span style="font-size:9px;color:var(--ylw);margin-left:4px">v'+esc(upd.currentVersion||'?')+' → v'+esc(upd.latestVersion)+'</span>'
+              :(p.version?'<span style="font-size:9px;color:var(--grn);margin-left:4px">v'+esc(p.version)+'</span>':'');
+            const updBtn=upd?'<button class="ccm-btn ccm-btn-primary" style="padding:2px 8px;font-size:9px;margin-right:6px" data-update-key="'+esc(p.key)+'">Update</button>':'';
+            return `
             <div class="ccm-plugin-row">
               <div class="ccm-plugin-icon" style="background:${colors[i%colors.length]}">${icons[i%icons.length]}</div>
               <div class="ccm-plugin-info">
-                <div><span class="ccm-plugin-name">${esc(p.name)}</span><span class="ccm-plugin-source${p.community?' community':''}">${esc(p.source)}</span>${p.version?'<span style="font-size:9px;color:var(--grn);margin-left:4px">v'+esc(p.version)+'</span>':''}</div>
+                <div><span class="ccm-plugin-name">${esc(p.name)}</span><span class="ccm-plugin-source${p.community?' community':''}">${esc(p.source)}</span>${verHtml}</div>
                 <div class="ccm-plugin-desc">${esc(p.description||'No description')}</div>
               </div>
+              ${updBtn}
               <button class="ccm-toggle ${p.enabled?'on':'off'}" data-plugin="${esc(p.key)}" title="${p.enabled?'Disable':'Enable'}"></button>
-            </div>
-          `).join('');
+            </div>`;
+          }).join('');
         }
 
         if(filteredTools.length){
@@ -932,6 +999,18 @@ setInterval(async()=>{
             const nowOn=btn.classList.contains('on');
             btn.classList.toggle('on');btn.classList.toggle('off');
             await window.api.toggleClaudePlugin({pluginKey:key,enabled:!nowOn});
+          };
+        });
+        // Wire plugin update buttons
+        list.querySelectorAll('[data-update-key]').forEach(btn=>{
+          btn.onclick=async()=>{
+            const key=btn.dataset.updateKey;
+            btn.disabled=true;btn.textContent='Updating...';
+            try{
+              const r=await window.api.updatePlugin({key});
+              if(r.ok){btn.textContent='✓ Updated';btn.style.color='var(--grn)';btn.style.background='transparent';_pluginUpdates=null}
+              else{btn.textContent='Failed';btn.style.color='var(--red)';btn.title=r.error||''}
+            }catch(e){btn.textContent='Error';btn.style.color='var(--red)';btn.title=e.message||''}
           };
         });
       } else {

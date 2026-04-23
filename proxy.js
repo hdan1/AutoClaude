@@ -171,8 +171,10 @@ class ClaudeProxy extends EventEmitter {
           if (line.trim()) this._parseLine(line, result);
         }
       });
+      let stderrBuf = '';
       this.process.stderr.on('data', (chunk) => {
         const text = chunk.toString();
+        stderrBuf += text;
         this.emit('stderr', text);
         if (this._isRetryable(text)) result.error = text.trim();
       });
@@ -189,6 +191,9 @@ class ClaudeProxy extends EventEmitter {
         this.process = null;
         result.exitCode = code;
         result.endTime = Date.now();
+        if (code && code !== 0 && !result.error && stderrBuf.trim()) {
+          result.error = stderrBuf.trim().slice(0, 2000);
+        }
         if (buffer.trim()) this._parseLine(buffer, result);
         if (result.firstTokenTime) result.ttft = result.firstTokenTime - result.startTime;
         setTimeout(async () => {
@@ -224,8 +229,10 @@ class ClaudeProxy extends EventEmitter {
           if (line.trim()) this._parseLine(line, result);
         }
       });
+      let stderrBuf = '';
       this.process.stderr.on('data', (chunk) => {
         const text = chunk.toString();
+        stderrBuf += text;
         this.emit('stderr', text);
         if (this._isRetryable(text)) result.error = text.trim();
       });
@@ -243,6 +250,9 @@ class ClaudeProxy extends EventEmitter {
         this.process = null;
         result.exitCode = code;
         result.endTime = Date.now();
+        if (code && code !== 0 && !result.error && stderrBuf.trim()) {
+          result.error = stderrBuf.trim().slice(0, 2000);
+        }
         if (buffer.trim()) this._parseLine(buffer, result);
         if (result.firstTokenTime) result.ttft = result.firstTokenTime - result.startTime;
         setTimeout(async () => {

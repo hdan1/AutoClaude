@@ -105,4 +105,7 @@ contextBridge.exposeInMainWorld('api', {
   saveSettingsTag:       opts => ipcRenderer.invoke('save-settings-tag', opts),
   deleteSettingsTag:     opts => ipcRenderer.invoke('delete-settings-tag', opts),
   checkClaudeUpdate:     opts => ipcRenderer.invoke('check-claude-update', opts),
+  checkPluginUpdates:    opts => ipcRenderer.invoke('check-plugin-updates', opts),
+  updatePlugin:          opts => ipcRenderer.invoke('update-plugin', opts),
+  updateAllPlugins:      opts => ipcRenderer.invoke('update-all-plugins', opts),
 });
