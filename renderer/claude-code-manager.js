@@ -13,12 +13,16 @@ setInterval(async()=>{
 },5000);
 // ── Claude Code Manager ─────────────────────────
 (function(){
+  try{
+  console.log('[CCM] IIFE start');
   const overlay=$('ccmOverlay'),modal=$('ccmModal'),body=$('ccmBody');
   const badge=$('ccBadge'),badgeText=$('ccBadgeText');
+  console.log('[CCM] elements:', {overlay:!!overlay, modal:!!modal, body:!!body, badge:!!badge, badgeText:!!badgeText});
+  if(!badge||!badgeText||!overlay||!modal||!body){console.error('[CCM] Missing DOM elements — aborting');return}
+  if(!window.api||typeof window.api.detectClaudeCode!=='function'){console.error('[CCM] window.api.detectClaudeCode not available');return}
   let ccState=null, activeTab='overview';
 
-  // Badge click opens modal
-  badge.onclick=()=>{openModal()};
+  badge.onclick=()=>{console.log('[CCM] badge clicked');openModal()};
   $('ccmClose').onclick=closeModal;
   overlay.onclick=closeModal;
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&modal.classList.contains('show'))closeModal()});
@@ -81,31 +85,35 @@ setInterval(async()=>{
     else if(activeTab==='plugins') renderPlugins();
   }
 
-  // Update badge on startup and periodically
   async function refreshBadge(){
+    console.log('[CCM] refreshBadge: start');
     try{
+      console.log('[CCM] refreshBadge: calling detectClaudeCode');
       const p=window.api.detectClaudeCode();
-      const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000));
+      const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('detect-timeout')),8000));
       ccState=await Promise.race([p,timeout]);
+      console.log('[CCM] refreshBadge: got state', JSON.stringify(ccState));
       if(ccState.installed){
         badge.className='cc-badge installed';
         badgeText.textContent='Claude Code v'+(ccState.version||'?');
-        // Check for updates in background
         try{
+          console.log('[CCM] refreshBadge: checking updates');
           const upd=await window.api.checkClaudeUpdate();
           if(upd&&upd.updateAvailable){
             badge.className='cc-badge update-available';
             badgeText.textContent='Claude Code v'+(ccState.version||'?')+' ⬆ Update';
           }
-        }catch{}
+        }catch(ue){console.warn('[CCM] refreshBadge: update check failed',ue)}
       } else {
         badge.className='cc-badge missing';
         badgeText.textContent='Claude Code missing';
       }
-    }catch{
+    }catch(err){
+      console.error('[CCM] refreshBadge: error',err);
       badge.className='cc-badge missing';
       badgeText.textContent='Claude Code missing';
     }
+    console.log('[CCM] refreshBadge: done, badge=',badgeText.textContent);
   }
   refreshBadge();
 
@@ -1126,4 +1134,17 @@ setInterval(async()=>{
     }
     renderList();
   }
+
+  }catch(e){console.error('[CCM] IIFE crashed:',e)}
 })();
+
+// Safety net: if badge is still "Checking..." after 12s, recover it
+setTimeout(()=>{
+  const bt=document.getElementById('ccBadgeText');
+  const b=document.getElementById('ccBadge');
+  if(bt&&/checking/i.test(bt.textContent)){
+    console.warn('[CCM] Safety net: badge still stuck at "Checking...", forcing fallback');
+    b.className='cc-badge missing';
+    bt.textContent='Claude Code — click to check';
+  }
+},12000);
