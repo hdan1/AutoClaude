@@ -1,6 +1,6 @@
 {
   "name": "auto-claude",
-  "version": "3.11.3",
+  "version": "3.11.4",
   "description": "Auto Claude — multi-session Claude Code dashboard with real-time monitoring",
   "main": "main.js",
   "scripts": {
@@ -38,6 +38,7 @@
       "session-manager.js",
       "install-hooks.js",
       "lib/**/*",
+      "renderer/**/*",
       "chart.html",
       "preload-chart.js",
       "hooks/auto-claude-hook.js"
