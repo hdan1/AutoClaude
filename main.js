@@ -1008,6 +1008,14 @@ ipcMain.handle('load-config', withTrustedIpc('load-config', (event) => {
   return config;
 }, trustDeps, {}));
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+const ALLOWED_LOG_LEVELS = new Set(['info', 'warn', 'error', 'debug']);
+ipcMain.on('log-to-file', withTrustedIpc('log-to-file', (event, { level, ctx, msg }) => {
+  if (!ALLOWED_LOG_LEVELS.has(level)) return;
+  if (typeof ctx !== 'string' || typeof msg !== 'string') return;
+  logger[level](ctx, msg.slice(0, 2000));
+}, trustDeps));
+
 ipcMain.handle('show-confirm-dialog', withTrustedIpc('show-confirm-dialog', async (event, opts) => {
   const r = await dialog.showMessageBox(mainWindow, {
     type: 'warning',

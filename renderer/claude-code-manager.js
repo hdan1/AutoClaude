@@ -13,16 +13,26 @@ setInterval(async()=>{
 },5000);
 // ── Claude Code Manager ─────────────────────────
 (function(){
+  const _t0=Date.now(), _ts=()=>`+${Date.now()-_t0}ms`;
+  const logCcm=(level,...parts)=>{
+    try{
+      if(window.api&&typeof window.api.logToFile==='function'){
+        const msg=parts.map(p=>typeof p==='string'?p:JSON.stringify(p)).join(' ');
+        window.api.logToFile(level,'ccm',`${_ts()} ${msg}`);
+      }
+    }catch{}
+  };
   try{
-  console.log('[CCM] IIFE start');
+  logCcm('info','IIFE start');
   const overlay=$('ccmOverlay'),modal=$('ccmModal'),body=$('ccmBody');
   const badge=$('ccBadge'),badgeText=$('ccBadgeText');
-  console.log('[CCM] elements:', {overlay:!!overlay, modal:!!modal, body:!!body, badge:!!badge, badgeText:!!badgeText});
-  if(!badge||!badgeText||!overlay||!modal||!body){console.error('[CCM] Missing DOM elements — aborting');return}
-  if(!window.api||typeof window.api.detectClaudeCode!=='function'){console.error('[CCM] window.api.detectClaudeCode not available');return}
+  logCcm('info','elements', {overlay:!!overlay, modal:!!modal, body:!!body, badge:!!badge, badgeText:!!badgeText});
+  if(!badge||!badgeText||!overlay||!modal||!body){logCcm('error','Missing DOM elements — aborting');return}
+  if(!window.api||typeof window.api.detectClaudeCode!=='function'){logCcm('error','window.api.detectClaudeCode not available');return}
   let ccState=null, activeTab='overview';
 
-  badge.onclick=()=>{console.log('[CCM] badge clicked');openModal()};
+  badge.onclick=()=>{logCcm('info','badge clicked');openModal()};
+  badge._ccmClickWired=true;
   $('ccmClose').onclick=closeModal;
   overlay.onclick=closeModal;
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&modal.classList.contains('show'))closeModal()});
@@ -86,34 +96,38 @@ setInterval(async()=>{
   }
 
   async function refreshBadge(){
-    console.log('[CCM] refreshBadge: start');
+    logCcm('info','refreshBadge: start');
     try{
-      console.log('[CCM] refreshBadge: calling detectClaudeCode');
+      logCcm('info','refreshBadge: calling detectClaudeCode (timeout 8s)');
       const p=window.api.detectClaudeCode();
       const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('detect-timeout')),8000));
       ccState=await Promise.race([p,timeout]);
-      console.log('[CCM] refreshBadge: got state', JSON.stringify(ccState));
+      logCcm('info','refreshBadge: detectClaudeCode resolved', ccState);
       if(ccState.installed){
         badge.className='cc-badge installed';
         badgeText.textContent='Claude Code v'+(ccState.version||'?');
+        logCcm('info','refreshBadge: badge set to installed, now checking updates (timeout 15s)');
         try{
-          console.log('[CCM] refreshBadge: checking updates');
-          const upd=await window.api.checkClaudeUpdate();
+          const updP=window.api.checkClaudeUpdate();
+          const updTimeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('update-check-timeout')),15000));
+          const upd=await Promise.race([updP,updTimeout]);
+          logCcm('info','refreshBadge: checkClaudeUpdate resolved', upd);
           if(upd&&upd.updateAvailable){
             badge.className='cc-badge update-available';
             badgeText.textContent='Claude Code v'+(ccState.version||'?')+' ⬆ Update';
           }
-        }catch(ue){console.warn('[CCM] refreshBadge: update check failed',ue)}
+        }catch(ue){logCcm('warn','refreshBadge: update check failed/timed out:',ue?.message||ue)}
       } else {
+        logCcm('info','refreshBadge: not installed');
         badge.className='cc-badge missing';
         badgeText.textContent='Claude Code missing';
       }
     }catch(err){
-      console.error('[CCM] refreshBadge: error',err);
+      logCcm('error','refreshBadge: error:',err?.message||err);
       badge.className='cc-badge missing';
       badgeText.textContent='Claude Code missing';
     }
-    console.log('[CCM] refreshBadge: done, badge=',badgeText.textContent);
+    logCcm('info','refreshBadge: done, badge=',badgeText.textContent);
   }
   refreshBadge();
 
@@ -1135,16 +1149,43 @@ setInterval(async()=>{
     renderList();
   }
 
-  }catch(e){console.error('[CCM] IIFE crashed:',e)}
+  }catch(e){logCcm('error','IIFE crashed:',e?.message||e)}
 })();
 
-// Safety net: if badge is still "Checking..." after 12s, recover it
+// Safety net: if badge is still "Checking..." after 12s, recover it AND wire click handler
 setTimeout(()=>{
   const bt=document.getElementById('ccBadgeText');
   const b=document.getElementById('ccBadge');
+  if(window.api&&typeof window.api.logToFile==='function'){
+    const msg=`badge text: ${bt?.textContent||''} clickWired: ${!!b?._ccmClickWired}`;
+    window.api.logToFile('info','ccm',`Safety net fired at 12s — ${msg}`);
+  }
   if(bt&&/checking/i.test(bt.textContent)){
-    console.warn('[CCM] Safety net: badge still stuck at "Checking...", forcing fallback');
+    if(window.api&&typeof window.api.logToFile==='function'){
+      window.api.logToFile('warn','ccm','Safety net: badge STILL stuck at "Checking..." — IIFE likely stalled or crashed before refreshBadge completed');
+    }
     b.className='cc-badge missing';
     bt.textContent='Claude Code — click to check';
+  }
+  if(b&&!b._ccmClickWired){
+    if(window.api&&typeof window.api.logToFile==='function'){
+      window.api.logToFile('warn','ccm','Safety net: click handler was NOT wired by IIFE — wiring fallback click handler now');
+    }
+    b.addEventListener('click',async()=>{
+      const overlay=document.getElementById('ccmOverlay');
+      const modal=document.getElementById('ccmModal');
+      if(overlay&&modal){
+        try{
+          const p=window.api.detectClaudeCode();
+          const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),6000));
+          await Promise.race([p,timeout]);
+        }catch{}
+        overlay.classList.add('show');modal.classList.add('show');
+      }
+    });
+  } else if(b){
+    if(window.api&&typeof window.api.logToFile==='function'){
+      window.api.logToFile('info','ccm','Safety net: click handler already wired by IIFE — no action needed');
+    }
   }
 },12000);
