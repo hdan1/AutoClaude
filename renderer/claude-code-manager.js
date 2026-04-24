@@ -992,13 +992,18 @@ setInterval(async()=>{
         const filteredTools=installedTools.filter(t=>!q||t.name.toLowerCase().includes(q)||(t.description||'').toLowerCase().includes(q)||t.type.toLowerCase().includes(q));
         if(!filteredPlugins.length&&!filteredTools.length){list.innerHTML='<div style="text-align:center;color:var(--tx2);padding:20px;font-size:12px">No plugins or tools found</div>';return}
 
+        const renderVersionHtml=(item, upd)=>{
+          if(upd)return '<span style="font-size:9px;color:var(--ylw);margin-left:4px">v'+esc(upd.currentVersion||'?')+' → v'+esc(upd.latestVersion||'?')+'</span>';
+          if(item&&item.versionKnown&&item.version)return '<span style="font-size:9px;color:var(--grn);margin-left:4px">v'+esc(item.version)+'</span>';
+          if(item&&(item.versionStatus==='unknown-current'||item.versionKnown===false))return '<span style="font-size:9px;color:var(--tx2);margin-left:4px">version unknown</span>';
+          return '';
+        };
+
         let installedHtml='';
         if(filteredPlugins.length){
           installedHtml+=filteredPlugins.map((p,i)=>{
             const upd=updMap[p.key];
-            const verHtml=upd
-              ?'<span style="font-size:9px;color:var(--ylw);margin-left:4px">v'+esc(upd.currentVersion||'?')+' → v'+esc(upd.latestVersion)+'</span>'
-              :(p.version?'<span style="font-size:9px;color:var(--grn);margin-left:4px">v'+esc(p.version)+'</span>':'');
+            const verHtml=renderVersionHtml(p,upd);
             const updBtn=upd?'<button class="ccm-btn ccm-btn-primary" style="padding:2px 8px;font-size:9px;margin-right:6px" data-update-key="'+esc(p.key)+'">Update</button>':'';
             return `
             <div class="ccm-plugin-row">
@@ -1018,7 +1023,7 @@ setInterval(async()=>{
             <div class="ccm-plugin-row">
               <div class="ccm-plugin-icon" style="background:${colors[(i+filteredPlugins.length)%colors.length]}">${t.type==='mcp'?'🔌':'⚡'}</div>
               <div class="ccm-plugin-info">
-                <div><span class="ccm-plugin-name">${esc(t.name)}</span><span class="ccm-plugin-source">${esc(t.type)}</span></div>
+                <div><span class="ccm-plugin-name">${esc(t.name)}</span><span class="ccm-plugin-source">${esc(t.type)}</span>${renderVersionHtml(t,null)}</div>
                 <div class="ccm-plugin-desc">${esc(t.description||'Installed tool')}</div>
               </div>
               <span style="font-size:10px;color:var(--grn);font-weight:600" title="Managed externally">✓ Active</span>
