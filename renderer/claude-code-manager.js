@@ -287,7 +287,7 @@ setInterval(async()=>{
             btn.disabled=true;btn.textContent='Updating...';
             try{
               const r=await window.api.updatePlugin({key});
-              if(r.ok){btn.textContent='✓ Updated';btn.style.color='var(--grn)'}
+              if(r.ok){btn.textContent='✓ Updated';btn.style.color='var(--grn)';doPluginUpdateCheck(true)}
               else{btn.textContent='Failed';btn.style.color='var(--red)';btn.title=r.error||''}
             }catch(e){btn.textContent='Error';btn.style.color='var(--red)';btn.title=e.message||''}
           };
@@ -1095,7 +1095,7 @@ setInterval(async()=>{
             btn.disabled=true;btn.textContent='Updating...';
             try{
               const r=await window.api.updatePlugin({key});
-              if(r.ok){btn.textContent='✓ Updated';btn.style.color='var(--grn)';btn.style.background='transparent';_pluginUpdates=null}
+              if(r.ok){btn.textContent='✓ Updated';btn.style.color='var(--grn)';btn.style.background='transparent';_pluginUpdates=null;renderPlugins()}
               else{btn.textContent='Failed';btn.style.color='var(--red)';btn.title=r.error||''}
             }catch(e){btn.textContent='Error';btn.style.color='var(--red)';btn.title=e.message||''}
           };
