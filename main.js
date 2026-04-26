@@ -30,6 +30,11 @@ const {
   summarizeAutoUpdateError,
 } = require('./lib/runtime-utils');
 const { AutoUpdateError } = require('./lib/errors');
+const { uninstallProjectHooks } = require('./lib/hook-lifecycle');
+const { toRendererUpdateStatus } = require('./lib/update-status');
+const { forwardUpdateEvent } = require('./lib/main-update-events');
+const { clearHookStateAfterSuccessfulCleanup } = require('./lib/main-cleanup-state');
+const { buildDiagnostics } = require('./lib/diagnostics');
 const {
   saveToken,
   loadToken,
@@ -49,6 +54,11 @@ const {
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+let latestUpdateStatus = { status: '' };
+let telemetryState = { degraded: false, details: '' };
+let telemetryStateByTab = new Map();
+let latestOperationalError = '';
+let latestOperationalErrorSource = '';
 
 // ── Single Instance Lock ─────────────────────────
 const gotTheLock = app.requestSingleInstanceLock();
@@ -269,7 +279,33 @@ async function stopAllProjectBots() {
 }
 
 function _wireSessionManagerEvents() {
+  const recomputeTelemetryState = () => {
+    const degradedEntries = Array.from(telemetryStateByTab.values()).filter((state) => state?.degraded);
+    const details = degradedEntries.length > 0
+      ? (degradedEntries[degradedEntries.length - 1].details || 'Telemetry degraded')
+      : '';
+    telemetryState = { degraded: degradedEntries.length > 0, details };
+  };
   sessionManager.on('save-config', () => { saveConfig(config); });
+  sessionManager.on('telemetry-degraded', ({ tabId, details }) => {
+    const nextDetails = details || 'Telemetry degraded';
+    telemetryStateByTab.set(tabId || 'default', { degraded: true, details: nextDetails });
+    recomputeTelemetryState();
+    latestOperationalError = nextDetails;
+    latestOperationalErrorSource = 'telemetry';
+  });
+  sessionManager.on('telemetry-restored', ({ tabId }) => {
+    telemetryStateByTab.delete(tabId || 'default');
+    recomputeTelemetryState();
+    if (latestOperationalErrorSource !== 'telemetry') return;
+    if (telemetryState.degraded) {
+      latestOperationalError = telemetryState.details || 'Telemetry degraded';
+      latestOperationalErrorSource = 'telemetry';
+      return;
+    }
+    latestOperationalError = '';
+    latestOperationalErrorSource = '';
+  });
   sessionManager.on('get-logs', ({ tabId, count, callback }) => {
     try {
       const projectDir = sessionManager.getState(tabId)?.projectDir;
@@ -677,11 +713,33 @@ app.whenReady().then(async () => {
       autoUpdater.autoInstallOnAppQuit = true;
       autoUpdater.on('update-available', (info) => {
         logger.info('app', `Update available: v${info.version}`);
-        send('update-status', { status: 'downloading', version: info.version });
+        forwardUpdateEvent({
+          state: {
+            get latestUpdateStatus() { return latestUpdateStatus; },
+            set latestUpdateStatus(value) { latestUpdateStatus = value; },
+            get latestOperationalError() { return latestOperationalError; },
+            set latestOperationalError(value) { latestOperationalError = value; },
+            get latestOperationalErrorSource() { return latestOperationalErrorSource; },
+            set latestOperationalErrorSource(value) { latestOperationalErrorSource = value; },
+          },
+          send,
+          payload: toRendererUpdateStatus({ type: 'downloading', version: info.version }),
+        });
       });
       autoUpdater.on('update-downloaded', (info) => {
         logger.info('app', `Update downloaded: v${info.version}`);
-        send('update-status', { status: 'ready', version: info.version });
+        forwardUpdateEvent({
+          state: {
+            get latestUpdateStatus() { return latestUpdateStatus; },
+            set latestUpdateStatus(value) { latestUpdateStatus = value; },
+            get latestOperationalError() { return latestOperationalError; },
+            set latestOperationalError(value) { latestOperationalError = value; },
+            get latestOperationalErrorSource() { return latestOperationalErrorSource; },
+            set latestOperationalErrorSource(value) { latestOperationalErrorSource = value; },
+          },
+          send,
+          payload: toRendererUpdateStatus({ type: 'ready', version: info.version }),
+        });
       });
       autoUpdater.on('error', (err) => {
         const summary = summarizeAutoUpdateError(err);
@@ -690,6 +748,24 @@ app.whenReady().then(async () => {
           return;
         }
         logger.warn('app', `Auto-update error: ${summary}`);
+        latestOperationalError = summary;
+        latestOperationalErrorSource = 'updater';
+        forwardUpdateEvent({
+          state: {
+            get latestUpdateStatus() { return latestUpdateStatus; },
+            set latestUpdateStatus(value) { latestUpdateStatus = value; },
+            get latestOperationalError() { return latestOperationalError; },
+            set latestOperationalError(value) { latestOperationalError = value; },
+            get latestOperationalErrorSource() { return latestOperationalErrorSource; },
+            set latestOperationalErrorSource(value) { latestOperationalErrorSource = value; },
+          },
+          send,
+          payload: toRendererUpdateStatus({
+            type: 'error',
+            summary: 'Update service unavailable',
+            detail: summary,
+          }),
+        });
       });
       if (config.system?.autoUpdate !== false) {
         autoUpdater.checkForUpdatesAndNotify().catch(() => {
@@ -868,8 +944,9 @@ async function _createWorkspaceProject(projectName) {
 async function _closeWorkspaceProject(tabId) {
   const session = sessionManager.get(tabId);
   if (session?.state.projectDir && session.state.hooksInstalled && config.hooks?.install) {
-    uninstallHooks(session.state.projectDir);
-    session.state.hooksInstalled = false;
+    const uninstallResult = uninstallHooks(session.state.projectDir);
+    if (!uninstallResult.ok) send('update-status', uninstallResult);
+    clearHookStateAfterSuccessfulCleanup(session, uninstallResult);
   }
   const closed = await sessionManager.close(tabId);
   if (!closed?.ok) return closed || { ok: false, error: 'Close failed' };
@@ -892,8 +969,9 @@ function cleanup() {
     // Uninstall hooks for all sessions
     for (const [tabId, session] of sessionManager.sessions) {
       if (session.state.projectDir && session.state.hooksInstalled && config.hooks?.install) {
-        uninstallHooks(session.state.projectDir);
-        session.state.hooksInstalled = false;
+        const uninstallResult = uninstallHooks(session.state.projectDir);
+        if (!uninstallResult.ok) send('update-status', uninstallResult);
+        clearHookStateAfterSuccessfulCleanup(session, uninstallResult);
       }
     }
   }
@@ -958,13 +1036,20 @@ function installHooks(projectDir) {
 }
 
 function uninstallHooks(projectDir) {
-  try {
-    const installerPath = getInstallerPath();
-    // C2: Use execFileSync with arguments array
-    execFileSync('node', [installerPath, projectDir, '--uninstall'], { stdio: 'pipe' });
-  } catch (err) {
-    logger.warn('hooks', 'Hook uninstall error', err);
+  const installerPath = getInstallerPath();
+  const result = uninstallProjectHooks({ projectDir, installerPath, execFileSync });
+  if (!result.ok) {
+    latestOperationalError = result.details || result.summary;
+    latestOperationalErrorSource = 'hooks';
+    logger.warn('hooks', result.summary, new Error(result.details));
+    send('log', { type: 'stderr', text: `${result.summary}: ${result.details}` });
+    return result;
   }
+  if (latestOperationalErrorSource === 'hooks') {
+    latestOperationalError = '';
+    latestOperationalErrorSource = '';
+  }
+  return result;
 }
 
 function saveStatusJson(s) {
@@ -1109,8 +1194,9 @@ ipcMain.handle('stop-session', withTrustedIpc('stop-session', async (event, data
   const tabId = data?.tabId || 'default';
   const session = sessionManager.get(tabId);
   if (session?.state.projectDir && session.state.hooksInstalled && config.hooks?.install) {
-    uninstallHooks(session.state.projectDir);
-    session.state.hooksInstalled = false;
+    const uninstallResult = uninstallHooks(session.state.projectDir);
+    if (!uninstallResult.ok) send('update-status', uninstallResult);
+    clearHookStateAfterSuccessfulCleanup(session, uninstallResult);
   }
   await sessionManager.stop(tabId);
   // Preserve session (with sessionId) so next start continues it
@@ -1624,6 +1710,28 @@ ipcMain.handle('get-app-log-info', withTrustedIpc('get-app-log-info', (event) =>
     return { ok: false, error: e.message };
   }
 }, trustDeps));
+
+ipcMain.handle('get-diagnostics', withTrustedIpc('get-diagnostics', async (event, data = {}) => {
+  const claude = await detectClaudeStateWithSecureToken();
+  const tabId = typeof data?.tabId === 'string' ? data.tabId : '';
+  const focusedSession = (tabId ? sessionManager?.get(tabId) : null)
+    || sessionManager?.get('default')
+    || Array.from(sessionManager.sessions.values())[0]
+    || null;
+  const telemetry = tabId ? (telemetryStateByTab.get(tabId) || { degraded: false, details: '' }) : telemetryState;
+  const lastError = latestOperationalErrorSource === 'telemetry' && tabId && !telemetry.degraded
+    ? ''
+    : latestOperationalError;
+  return buildDiagnostics({
+    appVersion: app.getVersion(),
+    claude,
+    workspacePath: focusedSession?.state?.projectDir || '',
+    logPath: APP_LOG_FILE,
+    updater: latestUpdateStatus,
+    telemetry,
+    lastError,
+  });
+}, trustDeps, {}));
 
 ipcMain.handle('open-app-log-folder', withTrustedIpc('open-app-log-folder', async (event) => {
   try {

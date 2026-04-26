@@ -42,10 +42,12 @@ try {
   };
 }
 
-const projectDir = process.argv[2];
-const uninstall = process.argv.includes('--uninstall');
+const args = process.argv.slice(2);
+const uninstall = args.includes('--uninstall');
+const positionalArgs = args.filter(arg => arg !== '--uninstall');
+const projectDir = positionalArgs[0];
 
-if (!projectDir) {
+if (!projectDir || positionalArgs.length !== 1) {
   console.error('Usage: node install-hooks.js <project-dir> [--uninstall]');
   process.exit(1);
 }

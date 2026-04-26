@@ -8,6 +8,7 @@
   const saveRecBtn=$('setupSaveRecommended'), skipRecBtn=$('setupSkipRecommended');
   const logInfo=$('setupLogInfo'), logPathEl=$('setupLogPath'), openLogsBtn=$('setupOpenLogs');
   let currentStatus=null;
+  let diagnosticsBox=null;
 
   async function openSetup(status){
     currentStatus=status;
@@ -15,7 +16,9 @@
     overlay.classList.add('show');modal.classList.add('show');
     progress.style.display='none';success.style.display='none';
     items.style.display='';actions.style.display='';
+    ensureDiagnosticsBox();
     await refreshLogInfo();
+    await refreshDiagnostics();
   }
   function closeSetup(){overlay.classList.remove('show');modal.classList.remove('show')}
 
@@ -135,6 +138,14 @@
     items.appendChild(row);
   }
 
+  function renderOperationalMessage(payload,fallback){
+    return window.operationalStatus.renderOperationalMessage(payload,fallback);
+  }
+
+  function showOperationalFailure(summary,details,nextStep){
+    showProgress(renderOperationalMessage({summary,details,nextSteps:nextStep?[nextStep]:[]},summary));
+  }
+
   // Individual install actions
   async function doInstallPrerequisite(name){
     const labels={git:'Git (git-bash)',node:'Node.js'};
@@ -142,8 +153,8 @@
     try{
       const result=await window.api.installPrerequisite({name});
       if(result.ok){await refreshStatus();}
-      else{showProgress('Install failed: '+(result.error||'Unknown error'));}
-    }catch(e){showProgress('Install error: '+e.message);}
+      else{showOperationalFailure('Install failed',result.error||'Unknown error','retry install');}
+    }catch(e){showOperationalFailure('Install error',e.message,'retry install');}
   }
   async function doInstallClaude(){
     const method=navigator.platform.startsWith('Win')?'powershell':'curl';
@@ -151,8 +162,8 @@
     try{
       const result=await window.api.installClaudeCode({method});
       if(result.ok){await refreshStatus();}
-      else{showProgress('Install failed: '+(result.error||'Unknown error'));}
-    }catch(e){showProgress('Install error: '+e.message);}
+      else{showOperationalFailure('Install failed',result.error||'Unknown error','retry install');}
+    }catch(e){showOperationalFailure('Install error',e.message,'retry install');}
   }
   function showAuthPicker(){
     closeSetup();
@@ -165,8 +176,8 @@
       // Pass full key as source — backend handles both key-based and legacy formats
       const result=await window.api.installClaudePlugin({source:key,repo:repo||null});
       if(result.ok){await refreshStatus();}
-      else{showProgress('Plugin install failed: '+(result.error||'Unknown error'));}
-    }catch(e){showProgress('Plugin install error: '+e.message);}
+      else{showOperationalFailure('Plugin install failed',result.error||'Unknown error','retry install');}
+    }catch(e){showOperationalFailure('Plugin install error',e.message,'retry install');}
   }
   async function doEnablePlugin(key){
     const name=key.split('@')[0];
@@ -174,16 +185,16 @@
     try{
       const result=await window.api.toggleClaudePlugin({pluginKey:key,enabled:true});
       if(result.ok){await refreshStatus();}
-      else{showProgress('Enable failed: '+(result.error||'Unknown error'));}
-    }catch(e){showProgress('Enable error: '+e.message);}
+      else{showOperationalFailure('Enable failed',result.error||'Unknown error','retry enable');}
+    }catch(e){showOperationalFailure('Enable error',e.message,'retry enable');}
   }
   async function doInstallTool(key,name){
     showProgress('Installing '+(name||key)+'... (this may open an interactive prompt)');
     try{
       const result=await window.api.installTool({key});
       if(result.ok){await refreshStatus();}
-      else{showProgress('Install failed: '+(result.error||'Unknown error'));}
-    }catch(e){showProgress('Install error: '+e.message);}
+      else{showOperationalFailure('Install failed',result.error||'Unknown error','retry install');}
+    }catch(e){showOperationalFailure('Install error',e.message,'retry install');}
   }
 
   // Install All Missing — sequential
@@ -204,43 +215,43 @@
         step++;updateProgress(step,total,'Installing '+(prereqLabels[name]||name)+'...');
         try{
           const r=await window.api.installPrerequisite({name});
-          if(!r.ok){showProgress('Install '+(prereqLabels[name]||name)+' failed: '+(r.error||''));return;}
-        }catch(e){showProgress('Install '+(prereqLabels[name]||name)+' error: '+e.message);return;}
+          if(!r.ok){showOperationalFailure('Install '+(prereqLabels[name]||name)+' failed',r.error||'Unknown error','retry install');return;}
+        }catch(e){showOperationalFailure('Install '+(prereqLabels[name]||name)+' error',e.message,'retry install');return;}
       }
 
       if(!s.claudeCode.installed){
         step++;updateProgress(step,total,'Installing Claude Code...');
         try{
           const r=await window.api.installClaudeCode({method:navigator.platform.startsWith('Win')?'powershell':'curl'});
-          if(!r.ok){showProgress('Install failed: '+(r.error||''));return;}
-        }catch(e){showProgress('Install error: '+e.message);return;}
+          if(!r.ok){showOperationalFailure('Install failed',r.error||'Unknown error','retry install');return;}
+        }catch(e){showOperationalFailure('Install error',e.message,'retry install');return;}
       }
       // Refresh detection after install
-      const freshDetect=await window.api.detectClaudeCode();
-      if(!freshDetect.installed){showProgress('Claude Code install did not succeed.');return;}
+      const freshClaudeState=await window.api.getClaudeStateFacade();
+      if(!freshClaudeState.installed){showProgress('Claude Code install did not succeed.');return;}
 
-      if(!freshDetect.authType){
+      if(!freshClaudeState.authType){
         step++;updateProgress(step,total,'Authenticating...');
         try{
           const r=await window.api.authenticateClaudeCode({method:'oauth'});
-          if(!r.ok){showProgress('Auth failed: '+(r.error||''));return;}
-        }catch(e){showProgress('Auth error: '+e.message);return;}
+          if(!r.ok){showOperationalFailure('Auth failed',r.error||'Unknown error','retry authentication');return;}
+        }catch(e){showOperationalFailure('Auth error',e.message,'retry authentication');return;}
       }
 
       for(const p of s.plugins.missing){
         step++;updateProgress(step,total,'Installing '+p.key.split('@')[0]+'...');
         try{
           const r=await window.api.installClaudePlugin({source:p.key,repo:p.repo||null});
-          if(!r.ok){showProgress('Plugin install failed: '+(r.error||'Unknown'));return;}
-        }catch(e){showProgress('Plugin error: '+e.message);return;}
+          if(!r.ok){showOperationalFailure('Plugin install failed',r.error||'Unknown error','retry install');return;}
+        }catch(e){showOperationalFailure('Plugin install error',e.message,'retry install');return;}
       }
 
       for(const t of missingTools){
         step++;updateProgress(step,total,'Installing '+(t.name||t.key)+'...');
         try{
           const r=await window.api.installTool({key:t.key});
-          if(!r.ok){showProgress('Tool install failed: '+(r.error||'Unknown'));return;}
-        }catch(e){showProgress('Tool error: '+e.message);return;}
+          if(!r.ok){showOperationalFailure('Tool install failed',r.error||'Unknown error','retry install');return;}
+        }catch(e){showOperationalFailure('Tool install error',e.message,'retry install');return;}
       }
 
       await refreshStatus();
@@ -257,16 +268,23 @@
       const count=Array.isArray(result)?result.length:0;
       showProgress('Saved '+count+' plugin(s) as recommended.');
       setTimeout(()=>{progress.style.display='none';},2000);
-    }catch(e){showProgress('Error: '+e.message);}
+    }catch(e){showProgress(renderOperationalMessage({summary:'Save recommended failed',details:e.message,nextSteps:['retry save recommended']},'Save recommended failed'));}
   };
   skipRecBtn.onclick=()=>{recPrompt.style.display='none';};
   if(openLogsBtn){
     openLogsBtn.onclick=async()=>{
       try{
         const result=await window.api.openAppLogFolder();
-        if(!result?.ok){showProgress('Open logs failed: '+(result?.error||'Unknown error'));}
-      }catch(e){showProgress('Open logs failed: '+e.message);}
+        if(!result?.ok){showProgress(renderOperationalMessage({summary:'Open logs failed',details:(result?.error||'Unknown error'),nextSteps:['retry opening logs']},'Open logs failed'));}
+      }catch(e){showProgress(renderOperationalMessage({summary:'Open logs failed',details:e.message,nextSteps:['retry opening logs']},'Open logs failed'));}
     };
+  }
+
+  function ensureDiagnosticsBox(){
+    if(diagnosticsBox||!logInfo||!logInfo.parentNode)return;
+    diagnosticsBox=document.createElement('pre');
+    diagnosticsBox.style.cssText='margin-top:10px;padding:8px;border:1px solid var(--bdr);border-radius:6px;background:var(--bg2);color:var(--tx2);font-size:11px;white-space:pre-wrap';
+    logInfo.insertAdjacentElement('afterend',diagnosticsBox);
   }
 
   async function refreshLogInfo(){
@@ -281,6 +299,25 @@
       }
     }catch{
       logInfo.style.display='none';
+    }
+  }
+
+  async function refreshDiagnostics(){
+    if(!diagnosticsBox)return;
+    try{
+      const d=await window.api.getDiagnostics({tabId:document.querySelector('.t.active')?.dataset?.tabId||null});
+      diagnosticsBox.textContent=[
+        `App: ${d.appVersion||'unknown'}`,
+        `Claude: ${d.claudeVersion||'unknown'} (${d.authType||'no auth'})`,
+        `Path: ${d.claudePath||'unknown'}`,
+        `Workspace: ${d.workspacePath||'none'}`,
+        `Updater: ${d.updaterStatus||'idle'}`,
+        `Telemetry degraded: ${d.telemetryDegraded?'yes':'no'}`,
+        `Last error: ${d.lastError||'none'}`,
+        `Logs: ${d.logPath||'unknown'}`,
+      ].join('\n');
+    }catch{
+      diagnosticsBox.textContent='Diagnostics unavailable';
     }
   }
 
@@ -299,6 +336,7 @@
       if(!s)return;
       currentStatus=s;
       renderItems(s);
+      await refreshDiagnostics();
       progress.style.display='none';
       if(s.healthy){
         success.style.display='block';
@@ -307,7 +345,7 @@
         recPrompt.style.display='none';
         setTimeout(closeSetup,2000);
       }
-    }catch(e){showProgress('Health check failed: '+e.message);}
+    }catch(e){showProgress(renderOperationalMessage({summary:'Health check failed',details:e.message,nextSteps:['retry health check']},'Health check failed'));}
   }
 
   // Listen for health check from main process (startup)
@@ -319,6 +357,6 @@
   window.api.onInstallProgress(data=>{
     if(data.output)progressText.textContent=data.output.trim().split('\n').pop()||'';
     if(data.done&&!data.error)progressText.textContent='Installation complete.';
-    if(data.error)progressText.textContent='Error: '+data.error;
+    if(data.error)showOperationalFailure('Install failed',data.error,'retry install');
   });
 })();

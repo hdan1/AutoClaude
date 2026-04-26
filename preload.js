@@ -1,9 +1,28 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// H2: Listener cleanup — remove previous listeners before registering new ones
+// H2: Listener fanout — keep one IPC listener per channel and fan out to subscribers
+const channelListeners = new Map();
+
 function safeOn(channel, callback) {
-  ipcRenderer.removeAllListeners(channel);
-  ipcRenderer.on(channel, (_, d) => callback(d));
+  let entry = channelListeners.get(channel);
+  if (!entry) {
+    const subscribers = new Set();
+    const handler = (_, d) => {
+      for (const subscriber of subscribers) subscriber(d);
+    };
+    ipcRenderer.on(channel, handler);
+    entry = { subscribers, handler };
+    channelListeners.set(channel, entry);
+  }
+  entry.subscribers.add(callback);
+  return () => {
+    const current = channelListeners.get(channel);
+    if (!current) return;
+    current.subscribers.delete(callback);
+    if (current.subscribers.size > 0) return;
+    ipcRenderer.removeListener(channel, current.handler);
+    channelListeners.delete(channel);
+  };
 }
 
 contextBridge.exposeInMainWorld('api', {
@@ -99,6 +118,8 @@ contextBridge.exposeInMainWorld('api', {
   runHealthCheck:            () => ipcRenderer.invoke('run-health-check'),
   snapshotRecommendedPlugins:() => ipcRenderer.invoke('snapshot-recommended-plugins'),
   getAppLogInfo:             () => ipcRenderer.invoke('get-app-log-info'),
+  getDiagnostics:            opts => ipcRenderer.invoke('get-diagnostics', opts || {}),
+  getClaudeStateFacade:      () => ipcRenderer.invoke('get-claude-state-facade'),
   openAppLogFolder:          () => ipcRenderer.invoke('open-app-log-folder'),
   onHealthCheck:             cb => safeOn('health-check', cb),
   listSettingsTags:      () => ipcRenderer.invoke('list-settings-tags'),

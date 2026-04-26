@@ -458,6 +458,13 @@ class SessionManager extends EventEmitter {
       this.send(tabId, 'log', { type: 'system', text: `\u26a0 ${e.fileName} read ${e.count}x in this session (token waste)` });
       this.send(tabId, 'redundant-reads', e);
     });
+    proxy.on('telemetry-degraded', e => {
+      this.send(tabId, 'log', { type: 'stderr', text: `${e.summary}: ${e.details}` });
+      this.emit('telemetry-degraded', { tabId, ...e });
+    });
+    proxy.on('telemetry-restored', e => {
+      this.emit('telemetry-restored', { tabId, ...(e || {}) });
+    });
     proxy.on('metrics', m => {
       // Accumulate turn-level tokens into session totals in real-time
       // (proxy resets per turn, so add session baseline to give renderer the running total)

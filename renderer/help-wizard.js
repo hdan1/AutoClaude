@@ -1,6 +1,22 @@
 // ── Help Wizard ────────────────────────────────
 (function(){
-  const overlay=$('helpOverlay'),modal=$('helpModal');
+  const overlay=$('helpOverlay'),modal=$('helpModal'),body=$('helpBody'),dynamicSteps=$('helpDynamicSteps');
+  const recoveryStep={
+    title:'If something fails',
+    body:[
+      'Check live output first.',
+      'Open the app logs from Settings or Setup Health.',
+      'Look at updater status and Claude diagnostics.',
+      'If telemetry is degraded or hooks are stuck, retry cleanup or run install-hooks.js manually.',
+    ],
+  };
+  if(dynamicSteps&&!dynamicSteps.querySelector('.help-step')){
+    const step=document.createElement('div');
+    step.className='help-step';
+    step.dataset.step=String(body.querySelectorAll('.help-step').length);
+    step.innerHTML=`<h3>${recoveryStep.title}</h3>${recoveryStep.body.map(line=>`<p>${line}</p>`).join('')}`;
+    dynamicSteps.appendChild(step);
+  }
   const steps=modal.querySelectorAll('.help-step');
   const dots=$('helpDots'),prevBtn=$('helpPrev'),nextBtn=$('helpNext');
   let current=0;

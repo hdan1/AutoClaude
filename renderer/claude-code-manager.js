@@ -30,6 +30,44 @@ setInterval(async()=>{
   if(!badge||!badgeText||!overlay||!modal||!body){logCcm('error','Missing DOM elements — aborting');return}
   if(!window.api||typeof window.api.detectClaudeCode!=='function'){logCcm('error','window.api.detectClaudeCode not available');return}
   let ccState=null, activeTab='overview';
+  let retryUpdateAction=null;
+
+  function renderOperationalMessage(payload,fallback){
+    return window.operationalStatus.renderOperationalMessage(payload,fallback);
+  }
+
+  window.api.onUpdateStatus(payload=>{
+    const statusEl=document.querySelector('#ccmUpdateStatus');
+    const actionEl=document.querySelector('#ccmUpdateAction');
+    if(!statusEl||!actionEl||!payload)return;
+    if(payload.status==='downloading'){
+      statusEl.textContent=payload.summary+(payload.meta?.version?` (${payload.meta.version})`:'' );
+      statusEl.style.color='var(--tx3)';
+      actionEl.innerHTML='';
+      return;
+    }
+    if(payload.status==='ready'){
+      statusEl.textContent=payload.summary+(payload.meta?.version?` (${payload.meta.version})`:'' );
+      statusEl.style.color='var(--grn)';
+      actionEl.innerHTML='<button class="ccm-link" id="ccmRestartToUpdate">Restart app to apply ›</button>';
+      const restartBtn=document.querySelector('#ccmRestartToUpdate');
+      if(restartBtn)restartBtn.onclick=()=>window.api.restartForUpdate();
+      return;
+    }
+    if(payload.scope==='hooks'){
+      statusEl.textContent=renderOperationalMessage(payload,payload.summary||'Hook cleanup incomplete');
+      statusEl.style.color='var(--red)';
+      actionEl.innerHTML='';
+      return;
+    }
+    if(payload.status==='error'){
+      statusEl.textContent=renderOperationalMessage(payload,payload.summary||'Update failed');
+      statusEl.style.color='var(--red)';
+      actionEl.innerHTML='<button class="ccm-link" id="ccmRetryUpdate">Retry ›</button>';
+      const retryBtn=document.querySelector('#ccmRetryUpdate');
+      if(retryBtn)retryBtn.onclick=()=>{if(retryUpdateAction)retryUpdateAction()};
+    }
+  });
 
   badge.onclick=()=>{logCcm('info','badge clicked');openModal()};
   badge._ccmClickWired=true;
@@ -150,11 +188,13 @@ setInterval(async()=>{
     // Check for updates
     const statusEl=body.querySelector('#ccmUpdateStatus');
     const actionEl=body.querySelector('#ccmUpdateAction');
+    retryUpdateAction=()=>doUpdateCheck(true);
     (async()=>{
       try{
-        const upd=await window.api.checkClaudeUpdate();
+        const facade=await window.api.getClaudeStateFacade();
+        const upd=facade.update||{};
         if(upd.error){
-          statusEl.textContent='Check failed';statusEl.style.color='var(--red)';
+          statusEl.textContent=window.operationalStatus.renderOperationalMessage({summary:'Check failed',details:upd.error,nextSteps:['retry update check']},'Check failed');statusEl.style.color='var(--red)';
           actionEl.innerHTML='<button class="ccm-link" id="ccmRetryUpdate">Retry ›</button>';
           body.querySelector('#ccmRetryUpdate').onclick=()=>doUpdateCheck(true);
         } else if(upd.updateAvailable){
@@ -166,13 +206,14 @@ setInterval(async()=>{
           actionEl.innerHTML='<button class="ccm-link" id="ccmRetryUpdate">Check Again ›</button>';
           body.querySelector('#ccmRetryUpdate').onclick=()=>doUpdateCheck(true);
         }
-      }catch{
-        statusEl.textContent='Check failed';statusEl.style.color='var(--red)';
+        await doPluginUpdateCheck(false,facade.pluginUpdates||[],facade.pluginUpdatesError||'');
+      }catch(e){
+        statusEl.textContent=renderOperationalMessage({summary:'Check failed',details:e.message||'unknown error',nextSteps:['retry update check']},'Check failed');statusEl.style.color='var(--red)';
         actionEl.innerHTML='<button class="ccm-link" id="ccmRetryUpdate">Retry ›</button>';
         body.querySelector('#ccmRetryUpdate').onclick=()=>doUpdateCheck(true);
+        await doPluginUpdateCheck(false);
       }
     })();
-    doPluginUpdateCheck(false);
 
     async function doUpdateCheck(force){
       statusEl.textContent='Checking for updates...';statusEl.style.color='var(--tx3)';actionEl.innerHTML='';
@@ -188,8 +229,8 @@ setInterval(async()=>{
           actionEl.innerHTML='<button class="ccm-link" id="ccmRetryUpdate">Check Again ›</button>';
           body.querySelector('#ccmRetryUpdate').onclick=()=>doUpdateCheck(true);
         }
-      }catch{
-        statusEl.textContent='Check failed';statusEl.style.color='var(--red)';
+      }catch(e){
+        statusEl.textContent=renderOperationalMessage({summary:'Check failed',details:e.message||'unknown error',nextSteps:['retry update check']},'Check failed');statusEl.style.color='var(--red)';
         actionEl.innerHTML='<button class="ccm-link" id="ccmRetryUpdate">Retry ›</button>';
         body.querySelector('#ccmRetryUpdate').onclick=()=>doUpdateCheck(true);
       }
@@ -208,20 +249,25 @@ setInterval(async()=>{
           actionEl.innerHTML='<button class="ccm-link" id="ccmRetryUpdate">Retry ›</button>';
           body.querySelector('#ccmRetryUpdate').onclick=()=>doUpdateCheck(true);
         }
-      }catch{
-        statusEl.textContent='Update failed';statusEl.style.color='var(--red)';
+      }catch(e){
+        statusEl.textContent=renderOperationalMessage({summary:'Update failed',details:e.message||'unknown error',nextSteps:['retry update check']},'Update failed');statusEl.style.color='var(--red)';
         actionEl.innerHTML='<button class="ccm-link" id="ccmRetryUpdate">Retry ›</button>';
         body.querySelector('#ccmRetryUpdate').onclick=()=>doUpdateCheck(true);
       }
     }
 
-    async function doPluginUpdateCheck(force){
+    async function doPluginUpdateCheck(force,prefetchedUpdates,prefetchedError){
       const plugBody=body.querySelector('#ccmPluginUpdateBody');
       if(!plugBody)return;
       plugBody.innerHTML='<span style="color:var(--tx3)">Checking plugins...</span>';
       try{
-        const res=await window.api.checkPluginUpdates({forceRefresh:force});
-        const updates=(res.updates||[]).filter(u=>u.updateAvailable);
+        if(prefetchedError){
+          plugBody.innerHTML='<span style="color:var(--red)">'+esc(renderOperationalMessage({summary:'Plugin check failed',details:prefetchedError,nextSteps:['retry plugin check']},'Plugin check failed'))+'</span>';
+          return;
+        }
+        const updates=Array.isArray(prefetchedUpdates)
+          ? prefetchedUpdates.filter(u=>u.updateAvailable)
+          : ((await window.api.checkPluginUpdates({forceRefresh:force})).updates||[]).filter(u=>u.updateAvailable);
         if(updates.length===0){
           plugBody.innerHTML='<span style="color:var(--grn)">✓ All plugins up to date</span>';
           return;
@@ -260,7 +306,7 @@ setInterval(async()=>{
           }catch(e){allBtn.textContent='Error';allBtn.style.color='var(--red)';allBtn.title=e.message||''}
         };
       }catch(e){
-        plugBody.innerHTML='<span style="color:var(--red)">Check failed: '+esc(e.message||'unknown error')+'</span>';
+        plugBody.innerHTML='<span style="color:var(--red)">'+esc(renderOperationalMessage({summary:'Check failed',details:e.message||'unknown error',nextSteps:['retry plugin check']},'Check failed'))+'</span>';
       }
     }
   }
@@ -363,7 +409,7 @@ setInterval(async()=>{
         else{btn.disabled=false;btn.textContent='Retry Install';log.textContent+='\nInstall completed but claude not detected. Try restarting the app.'}
       } else {
         btn.disabled=false;btn.textContent='Retry Install';
-        log.textContent+='\nError: '+(result.error||'Unknown error');
+        log.textContent+='\n'+renderOperationalMessage({summary:'Install failed',details:result.error||'Unknown error',nextSteps:['retry install']},'Install failed');
       }
     };
   }
@@ -400,7 +446,7 @@ setInterval(async()=>{
           const log=form.querySelector('#ccmAuthLog');log.style.display='block';log.textContent='Opening browser for login...\n';
           const r=await window.api.authenticateClaudeCode({method:'anthropic'});
           if(r.ok){log.textContent+='Login successful!';ccState=await window.api.detectClaudeCode();refreshBadge();if(!ccState.installed){renderOverview()}else{wizardStep=3;renderReadyStep()}}
-          else log.textContent+='Error: '+(r.error||'Failed');
+          else log.textContent+=renderOperationalMessage({summary:'Login failed',details:r.error||'Failed',nextSteps:['retry login']},'Login failed');
         };
       } else if(method==='console'){
         form.innerHTML='<div class="ccm-cmd" style="margin-top:10px"><span>claude auth login --console</span></div><button class="ccm-btn ccm-btn-primary" id="ccmAuthGo">Run Login</button><div class="ccm-install-log" id="ccmAuthLog" style="display:none"></div>';
@@ -408,7 +454,7 @@ setInterval(async()=>{
           const log=form.querySelector('#ccmAuthLog');log.style.display='block';log.textContent='Starting console login...\n';
           const r=await window.api.authenticateClaudeCode({method:'console'});
           if(r.ok){log.textContent+='Login successful!';ccState=await window.api.detectClaudeCode();refreshBadge();if(!ccState.installed){renderOverview()}else{wizardStep=3;renderReadyStep()}}
-          else log.textContent+='Error: '+(r.error||'Failed');
+          else log.textContent+=renderOperationalMessage({summary:'Login failed',details:r.error||'Failed',nextSteps:['retry login']},'Login failed');
         };
       } else if(method==='cloud'){
         form.innerHTML='<div style="margin-top:10px;font-size:12px;color:var(--tx2)"><p>Follow the setup guide for your provider:</p><ul style="list-style:none;padding:0;margin:8px 0"><li style="margin:6px 0"><a href="https://code.claude.com/en/amazon-bedrock" style="color:var(--acc)" target="_blank">Amazon Bedrock setup guide →</a></li><li style="margin:6px 0"><a href="https://code.claude.com/en/google-vertex-ai" style="color:var(--acc)" target="_blank">Google Vertex AI setup guide →</a></li><li style="margin:6px 0"><a href="https://code.claude.com/en/microsoft-foundry" style="color:var(--acc)" target="_blank">Microsoft Foundry setup guide →</a></li></ul><button class="ccm-btn ccm-btn-secondary" id="ccmAuthSkip">I\'ve configured it externally → Continue</button></div>';

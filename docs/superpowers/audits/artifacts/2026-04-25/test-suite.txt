@@ -1,0 +1,1463 @@
+TAP version 13
+# Subtest: classifyQuestion returns unknown for null input
+ok 1 - classifyQuestion returns unknown for null input
+  ---
+  duration_ms: 1.373
+  ...
+# Subtest: classifyQuestion returns unknown for empty questions array
+ok 2 - classifyQuestion returns unknown for empty questions array
+  ---
+  duration_ms: 0.1364
+  ...
+# Subtest: classifyQuestion returns simple for options-based question
+ok 3 - classifyQuestion returns simple for options-based question
+  ---
+  duration_ms: 0.3908
+  ...
+# Subtest: classifyQuestion returns simple for y/n pattern
+ok 4 - classifyQuestion returns simple for y/n pattern
+  ---
+  duration_ms: 0.3508
+  ...
+# Subtest: classifyQuestion returns critical for approve plan
+ok 5 - classifyQuestion returns critical for approve plan
+  ---
+  duration_ms: 0.1695
+  ...
+# Subtest: classifyQuestion returns critical for delete operations
+ok 6 - classifyQuestion returns critical for delete operations
+  ---
+  duration_ms: 0.0839
+  ...
+# Subtest: autoAnswer returns null when autoAnswer config is off
+ok 7 - autoAnswer returns null when autoAnswer config is off
+  ---
+  duration_ms: 0.2917
+  ...
+# Subtest: autoAnswer selects recommended option
+ok 8 - autoAnswer selects recommended option
+  ---
+  duration_ms: 0.3055
+  ...
+# Subtest: autoAnswer selects all for multi-select
+ok 9 - autoAnswer selects all for multi-select
+  ---
+  duration_ms: 0.3442
+  ...
+# Subtest: autoAnswer returns yes for y/n with full autonomy
+ok 10 - autoAnswer returns yes for y/n with full autonomy
+  ---
+  duration_ms: 0.4112
+  ...
+# Subtest: autoAnswer delegates choice for preference questions
+ok 11 - autoAnswer delegates choice for preference questions
+  ---
+  duration_ms: 0.4437
+  ...
+# Subtest: autoAnswer returns single option with full autonomy
+ok 12 - autoAnswer returns single option with full autonomy
+  ---
+  duration_ms: 0.0999
+  ...
+# Subtest: autoAnswer loop dampening chooses stop for repeated /gsd-next prompts
+ok 13 - autoAnswer loop dampening chooses stop for repeated /gsd-next prompts
+  ---
+  duration_ms: 0.2357
+  ...
+# Subtest: handleQuestion returns ask-user when autoAnswer missing
+ok 14 - handleQuestion returns ask-user when autoAnswer missing
+  ---
+  duration_ms: 0.179
+  ...
+# Subtest: handleQuestion returns ask-user in manual mode
+ok 15 - handleQuestion returns ask-user in manual mode
+  ---
+  duration_ms: 0.0599
+  ...
+# Subtest: handleQuestion auto-answers simple question in full mode
+ok 16 - handleQuestion auto-answers simple question in full mode
+  ---
+  duration_ms: 0.1619
+  ...
+# Subtest: handleQuestion still auto-answers generic simple question when workflow detectors are inactive
+ok 17 - handleQuestion still auto-answers generic simple question when workflow detectors are inactive
+  ---
+  duration_ms: 0.3454
+  ...
+# Subtest: shouldRetry returns false for clean exit
+ok 18 - shouldRetry returns false for clean exit
+  ---
+  duration_ms: 0.1552
+  ...
+# Subtest: shouldRetry returns true for crash code 1
+ok 19 - shouldRetry returns true for crash code 1
+  ---
+  duration_ms: 0.0903
+  ...
+# Subtest: shouldRetry returns false for fatal error
+ok 20 - shouldRetry returns false for fatal error
+  ---
+  duration_ms: 0.0443
+  ...
+# Subtest: shouldRetry returns false when max retries exceeded
+ok 21 - shouldRetry returns false when max retries exceeded
+  ---
+  duration_ms: 0.0424
+  ...
+# Subtest: shouldRetry returns true for null exit code
+ok 22 - shouldRetry returns true for null exit code
+  ---
+  duration_ms: 0.0431
+  ...
+# Subtest: getResumeState returns empty for null sessions
+ok 23 - getResumeState returns empty for null sessions
+  ---
+  duration_ms: 0.1088
+  ...
+# Subtest: getResumeState returns sessions that were running
+ok 24 - getResumeState returns sessions that were running
+  ---
+  duration_ms: 0.0859
+  ...
+# Subtest: getResumeState respects autoResume disabled
+ok 25 - getResumeState respects autoResume disabled
+  ---
+  duration_ms: 0.0694
+  ...
+# Subtest: evaluatePermission auto-approves Read tool
+ok 26 - evaluatePermission auto-approves Read tool
+  ---
+  duration_ms: 0.107
+  ...
+# Subtest: evaluatePermission auto-approves default safe tools when no rules configured
+ok 27 - evaluatePermission auto-approves default safe tools when no rules configured
+  ---
+  duration_ms: 0.0545
+  ...
+# Subtest: evaluatePermission denies tools in alwaysDeny list
+ok 28 - evaluatePermission denies tools in alwaysDeny list
+  ---
+  duration_ms: 0.1167
+  ...
+# Subtest: evaluatePermission allows everything in full autonomy mode
+ok 29 - evaluatePermission allows everything in full autonomy mode
+  ---
+  duration_ms: 0.1066
+  ...
+# Subtest: evaluatePermission asks user for unknown tool without full autonomy
+ok 30 - evaluatePermission asks user for unknown tool without full autonomy
+  ---
+  duration_ms: 0.3513
+  ...
+# Subtest: electron build includes renderer assets referenced by index.html
+ok 31 - electron build includes renderer assets referenced by index.html
+  ---
+  duration_ms: 0.8492
+  ...
+# Subtest: log-to-file IPC is trust-wrapped before writing renderer diagnostics to app log file
+ok 32 - log-to-file IPC is trust-wrapped before writing renderer diagnostics to app log file
+  ---
+  duration_ms: 0.7748
+  ...
+# Subtest: claude code manager diagnostics use app log bridge instead of renderer console output
+ok 33 - claude code manager diagnostics use app log bridge instead of renderer console output
+  ---
+  duration_ms: 0.2492
+  ...
+# Subtest: isGsdInstalledFromPaths returns false when only one stale skill file exists
+ok 34 - isGsdInstalledFromPaths returns false when only one stale skill file exists
+  ---
+  duration_ms: 0.9536
+  ...
+# Subtest: isGsdInstalledFromPaths returns false when only marker and one stale gsd skill exist
+ok 35 - isGsdInstalledFromPaths returns false when only marker and one stale gsd skill exist
+  ---
+  duration_ms: 0.3103
+  ...
+# Subtest: isGsdInstalledFromPaths returns true when many gsd skills exist
+ok 36 - isGsdInstalledFromPaths returns true when many gsd skills exist
+  ---
+  duration_ms: 0.1374
+  ...
+# Subtest: DEFAULT_RECOMMENDED_PLUGINS does not include rust-analyzer-lsp
+ok 37 - DEFAULT_RECOMMENDED_PLUGINS does not include rust-analyzer-lsp
+  ---
+  duration_ms: 0.3462
+  ...
+# Subtest: DEFAULT_RECOMMENDED_PLUGINS includes context7
+ok 38 - DEFAULT_RECOMMENDED_PLUGINS includes context7
+  ---
+  duration_ms: 0.2674
+  ...
+# Subtest: DEFAULT_RECOMMENDED_PLUGINS includes GSD
+ok 39 - DEFAULT_RECOMMENDED_PLUGINS includes GSD
+  ---
+  duration_ms: 0.1904
+  ...
+# Subtest: DEFAULT_RECOMMENDED_TOOLS is empty after merging into DEFAULT_RECOMMENDED_PLUGINS
+ok 40 - DEFAULT_RECOMMENDED_TOOLS is empty after merging into DEFAULT_RECOMMENDED_PLUGINS
+  ---
+  duration_ms: 0.1398
+  ...
+# Subtest: deduplicateToolsAgainstPlugins removes tools already in plugins list
+ok 41 - deduplicateToolsAgainstPlugins removes tools already in plugins list
+  ---
+  duration_ms: 0.2459
+  ...
+# Subtest: deduplicateToolsAgainstPlugins returns all tools when no overlap
+ok 42 - deduplicateToolsAgainstPlugins returns all tools when no overlap
+  ---
+  duration_ms: 0.4328
+  ...
+# Subtest: extractVersion parses clean "claude 1.2.3" stdout
+ok 43 - extractVersion parses clean "claude 1.2.3" stdout
+  ---
+  duration_ms: 0.5045
+  ...
+# Subtest: extractVersion parses version from noisy stdout with update notice
+ok 44 - extractVersion parses version from noisy stdout with update notice
+  ---
+  duration_ms: 0.2192
+  ...
+# Subtest: extractVersion returns null for empty string
+ok 45 - extractVersion returns null for empty string
+  ---
+  duration_ms: 0.2228
+  ...
+# Subtest: extractVersion returns null for garbage output
+ok 46 - extractVersion returns null for garbage output
+  ---
+  duration_ms: 1.1231
+  ...
+# Subtest: getContextWindow returns config override when set
+ok 47 - getContextWindow returns config override when set
+  ---
+  duration_ms: 1.3354
+  ...
+# Subtest: getContextWindow returns API value when no override
+ok 48 - getContextWindow returns API value when no override
+  ---
+  duration_ms: 0.1787
+  ...
+# Subtest: getContextWindow matches model prefix
+ok 49 - getContextWindow matches model prefix
+  ---
+  duration_ms: 0.9034
+  ...
+# Subtest: getContextWindow returns default for unknown model
+ok 50 - getContextWindow returns default for unknown model
+  ---
+  duration_ms: 0.1777
+  ...
+# Subtest: detectGsdWarning returns null for empty
+ok 51 - detectGsdWarning returns null for empty
+  ---
+  duration_ms: 0.2716
+  ...
+# Subtest: detectGsdWarning detects warning
+ok 52 - detectGsdWarning detects warning
+  ---
+  duration_ms: 0.2158
+  ...
+# Subtest: detectGsdWarning detects critical
+ok 53 - detectGsdWarning detects critical
+  ---
+  duration_ms: 0.2688
+  ...
+# Subtest: shouldRecover false when disabled
+ok 54 - shouldRecover false when disabled
+  ---
+  duration_ms: 0.2508
+  ...
+# Subtest: shouldRecover true above threshold
+ok 55 - shouldRecover true above threshold
+  ---
+  duration_ms: 0.4736
+  ...
+# Subtest: shouldRecover false below threshold
+ok 56 - shouldRecover false below threshold
+  ---
+  duration_ms: 0.4912
+  ...
+# Subtest: shouldRecover false at max recoveries
+ok 57 - shouldRecover false at max recoveries
+  ---
+  duration_ms: 0.2099
+  ...
+# Subtest: shouldRecover forces on GSD critical
+ok 58 - shouldRecover forces on GSD critical
+  ---
+  duration_ms: 0.1486
+  ...
+# Subtest: getHandoffPrompt GSD
+ok 59 - getHandoffPrompt GSD
+  ---
+  duration_ms: 0.1142
+  ...
+# Subtest: getHandoffPrompt generic
+ok 60 - getHandoffPrompt generic
+  ---
+  duration_ms: 0.1554
+  ...
+# Subtest: getResumePrompt GSD
+ok 61 - getResumePrompt GSD
+  ---
+  duration_ms: 0.107
+  ...
+# Subtest: getResumePrompt generic
+ok 62 - getResumePrompt generic
+  ---
+  duration_ms: 0.1137
+  ...
+# Subtest: detectDerailment: does not fire when output ends with a question mark
+ok 63 - detectDerailment: does not fire when output ends with a question mark
+  ---
+  duration_ms: 3.0695
+  ...
+# Subtest: detectDerailment: does not fire when output asks "what do you think"
+ok 64 - detectDerailment: does not fire when output asks "what do you think"
+  ---
+  duration_ms: 1.1399
+  ...
+# Subtest: detectDerailment: does not fire when output asks "which approach"
+ok 65 - detectDerailment: does not fire when output asks "which approach"
+  ---
+  duration_ms: 0.1493
+  ...
+# Subtest: detectDerailment: does not fire when output asks for user input/preference
+ok 66 - detectDerailment: does not fire when output asks for user input/preference
+  ---
+  duration_ms: 0.1416
+  ...
+# Subtest: detectDerailment: does not fire when output says "let me know your thoughts"
+ok 67 - detectDerailment: does not fire when output says "let me know your thoughts"
+  ---
+  duration_ms: 0.2347
+  ...
+# Subtest: detectDerailment: does not fire when result.askedQuestion is true
+ok 68 - detectDerailment: does not fire when result.askedQuestion is true
+  ---
+  duration_ms: 0.109
+  ...
+# Subtest: detectDerailment: does not fire when lastAutoNextPrompt was gsd-new-milestone
+ok 69 - detectDerailment: does not fire when lastAutoNextPrompt was gsd-new-milestone
+  ---
+  duration_ms: 0.1517
+  ...
+# Subtest: detectDerailment: does not fire when lastAutoNextPrompt was gsd:new-project
+ok 70 - detectDerailment: does not fire when lastAutoNextPrompt was gsd:new-project
+  ---
+  duration_ms: 0.0913
+  ...
+# Subtest: detectDerailment: fires catch-all on non-question GSD output without completion
+ok 71 - detectDerailment: fires catch-all on non-question GSD output without completion
+  ---
+  duration_ms: 0.3683
+  ...
+# Subtest: detectDerailment: "is there anything else" alone does NOT trigger derailment
+ok 72 - detectDerailment: "is there anything else" alone does NOT trigger derailment
+  ---
+  duration_ms: 0.3972
+  ...
+# Subtest: detectDerailment: "is there anything else I can help with" triggers derailment
+ok 73 - detectDerailment: "is there anything else I can help with" triggers derailment
+  ---
+  duration_ms: 1.232
+  ...
+# Subtest: detectAutoNext: detects phase complete
+ok 74 - detectAutoNext: detects phase complete
+  ---
+  duration_ms: 0.1889
+  ...
+# Subtest: detectAutoNext: detects GSD suggestion in tail
+ok 75 - detectAutoNext: detects GSD suggestion in tail
+  ---
+  duration_ms: 0.73
+  ...
+# Subtest: detectAutoNext: rejects duplicate phase suggestion
+ok 76 - detectAutoNext: rejects duplicate phase suggestion
+  ---
+  duration_ms: 0.6351
+  ...
+# Subtest: detectAutoNext: allows wave re-execution
+ok 77 - detectAutoNext: allows wave re-execution
+  ---
+  duration_ms: 0.4108
+  ...
+# Subtest: detectAutoNext: returns null on milestone complete
+ok 78 - detectAutoNext: returns null on milestone complete
+  ---
+  duration_ms: 0.1555
+  ...
+# Subtest: detectAutoNext: returns null on empty result
+ok 79 - detectAutoNext: returns null on empty result
+  ---
+  duration_ms: 0.1612
+  ...
+# Subtest: detect: matches gsd:discuss-phase
+ok 80 - detect: matches gsd:discuss-phase
+  ---
+  duration_ms: 0.3201
+  ...
+# Subtest: detect: matches gsd:quick
+ok 81 - detect: matches gsd:quick
+  ---
+  duration_ms: 0.5439
+  ...
+# Subtest: detect: returns null on no match
+ok 82 - detect: returns null on no match
+  ---
+  duration_ms: 0.3777
+  ...
+# Subtest: _parseGsdCommand: parses execute-phase
+ok 83 - _parseGsdCommand: parses execute-phase
+  ---
+  duration_ms: 1.0068
+  ...
+# Subtest: _parseGsdCommand: parses discuss-phase with colon
+ok 84 - _parseGsdCommand: parses discuss-phase with colon
+  ---
+  duration_ms: 0.1878
+  ...
+# Subtest: _parseGsdCommand: returns null on non-phase command
+ok 85 - _parseGsdCommand: returns null on non-phase command
+  ---
+  duration_ms: 0.1622
+  ...
+# Subtest: detect returns null when gsd.enabled is false
+ok 86 - detect returns null when gsd.enabled is false
+  ---
+  duration_ms: 0.1622
+  ...
+# Subtest: detect works when gsd.enabled is true
+ok 87 - detect works when gsd.enabled is true
+  ---
+  duration_ms: 0.1685
+  ...
+# Subtest: detect returns null when gsdInstalled is false
+ok 88 - detect returns null when gsdInstalled is false
+  ---
+  duration_ms: 0.141
+  ...
+# Subtest: classifyQuestion returns unknown when gsdInstalled is false
+ok 89 - classifyQuestion returns unknown when gsdInstalled is false
+  ---
+  duration_ms: 0.185
+  ...
+# Subtest: detectAutoNext returns null when gsdInstalled is false
+ok 90 - detectAutoNext returns null when gsdInstalled is false
+  ---
+  duration_ms: 0.1599
+  ...
+# Subtest: detectDerailment returns null when gsdInstalled is false
+ok 91 - detectDerailment returns null when gsdInstalled is false
+  ---
+  duration_ms: 0.1527
+  ...
+# Subtest: detectAutoNext returns null when gsd.autoNext is false
+ok 92 - detectAutoNext returns null when gsd.autoNext is false
+  ---
+  duration_ms: 0.2459
+  ...
+# Subtest: detectDerailment returns null when gsd.derailmentCorrection is false
+ok 93 - detectDerailment returns null when gsd.derailmentCorrection is false
+  ---
+  duration_ms: 0.2272
+  ...
+# Subtest: detectAutoNext uses config autoContinueDelaySecs for agent waits
+ok 94 - detectAutoNext uses config autoContinueDelaySecs for agent waits
+  ---
+  duration_ms: 0.2385
+  ...
+# Subtest: detectDerailment: does not fire when output contains "awaiting human testing"
+ok 95 - detectDerailment: does not fire when output contains "awaiting human testing"
+  ---
+  duration_ms: 0.1282
+  ...
+# Subtest: detectDerailment: does not fire when output contains "yes / no / skip / blocked"
+ok 96 - detectDerailment: does not fire when output contains "yes / no / skip / blocked"
+  ---
+  duration_ms: 0.1173
+  ...
+# Subtest: detectAutoNext: rejects suggestion when output shows human UAT gate
+ok 97 - detectAutoNext: rejects suggestion when output shows human UAT gate
+  ---
+  duration_ms: 0.1257
+  ...
+# Subtest: SETTINGS_SCHEMA includes gsd.enabled
+ok 98 - SETTINGS_SCHEMA includes gsd.enabled
+  ---
+  duration_ms: 3.822
+  ...
+# Subtest: SETTINGS_SCHEMA includes all 6 GSD settings
+ok 99 - SETTINGS_SCHEMA includes all 6 GSD settings
+  ---
+  duration_ms: 0.2469
+  ...
+# Subtest: CATEGORY_ORDER includes gsd after superpowers
+ok 100 - CATEGORY_ORDER includes gsd after superpowers
+  ---
+  duration_ms: 0.2844
+  ...
+# Subtest: telegram panel includes tgMasterNotify select with full/ping/off options
+ok 101 - telegram panel includes tgMasterNotify select with full/ping/off options
+  ---
+  duration_ms: 1.2855
+  ...
+# Subtest: loadTelegramConfig wiring sets tgMasterNotify default to full
+ok 102 - loadTelegramConfig wiring sets tgMasterNotify default to full
+  ---
+  duration_ms: 0.4241
+  ...
+# Subtest: saveTelegramConfig wiring includes masterNotifyMode in payload
+ok 103 - saveTelegramConfig wiring includes masterNotifyMode in payload
+  ---
+  duration_ms: 0.2443
+  ...
+# Subtest: tools card is removed from main cards grid and no tools-card click handler is wired
+ok 104 - tools card is removed from main cards grid and no tools-card click handler is wired
+  ---
+  duration_ms: 1.3832
+  ...
+# Subtest: context bar uses persisted turnInputTokens/contextWindow and falls back to input token totals after reload
+ok 105 - context bar uses persisted turnInputTokens/contextWindow and falls back to input token totals after reload
+  ---
+  duration_ms: 0.3967
+  ...
+# Subtest: context bar label preserves sub-1% precision instead of rounding down to 0%
+ok 106 - context bar label preserves sub-1% precision instead of rounding down to 0%
+  ---
+  duration_ms: 0.1954
+  ...
+# Subtest: proxy text truncation threshold is expanded for readability
+ok 107 - proxy text truncation threshold is expanded for readability
+  ---
+  duration_ms: 0.2086
+  ...
+# Subtest: selecting a project requests latest session state for context continuity
+ok 108 - selecting a project requests latest session state for context continuity
+  ---
+  duration_ms: 0.2694
+  ...
+# Subtest: session dropdown preview keeps more prompt text with explicit ellipsis truncation
+ok 109 - session dropdown preview keeps more prompt text with explicit ellipsis truncation
+  ---
+  duration_ms: 0.1866
+  ...
+# Subtest: session selection hydrates and rehydrates token/context preview from stored session metadata
+ok 110 - session selection hydrates and rehydrates token/context preview from stored session metadata
+  ---
+  duration_ms: 0.3825
+  ...
+# Subtest: populateSessionsForTab resolves tab state before assigning session previews
+ok 111 - populateSessionsForTab resolves tab state before assigning session previews
+  ---
+  duration_ms: 1.1518
+  ...
+# Subtest: session state tracks explicit dropdown interaction for session selection
+ok 112 - session state tracks explicit dropdown interaction for session selection
+  ---
+  duration_ms: 0.5277
+  ...
+# Subtest: log formatter improves readability with line-oriented normalization and preserves code blocks/inline code
+ok 113 - log formatter improves readability with line-oriented normalization and preserves code blocks/inline code
+  ---
+  duration_ms: 0.7525
+  ...
+# warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+# warning: in the working copy of 'hooks/pre-commit-scan.js', LF will be replaced by CRLF the next time Git touches it
+# Preparing worktree (new branch 'feature/worktree-hooks')
+# warning: in the working copy of 'hooks/pre-commit-scan.js', LF will be replaced by CRLF the next time Git touches it
+# warning: in the working copy of 'note.txt', LF will be replaced by CRLF the next time Git touches it
+# warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+# warning: in the working copy of 'hooks/pre-commit-scan.js', LF will be replaced by CRLF the next time Git touches it
+# Subtest: install-git-hooks works in a git worktree and uses the worktree hook script on commit
+ok 114 - install-git-hooks works in a git worktree and uses the worktree hook script on commit
+  ---
+  duration_ms: 473.2664
+  ...
+# Subtest: install-git-hooks still installs a pre-commit hook in a normal checkout
+ok 115 - install-git-hooks still installs a pre-commit hook in a normal checkout
+  ---
+  duration_ms: 182.1995
+  ...
+# Subtest: withTrustedIpc rejects untrusted event
+ok 116 - withTrustedIpc rejects untrusted event
+  ---
+  duration_ms: 0.8635
+  ...
+# Subtest: withTrustedIpc passes trusted event to handler
+ok 117 - withTrustedIpc passes trusted event to handler
+  ---
+  duration_ms: 0.1997
+  ...
+# Subtest: withTrustedIpc passes action name to isTrusted
+ok 118 - withTrustedIpc passes action name to isTrusted
+  ---
+  duration_ms: 0.1186
+  ...
+# Subtest: withTrustedIpc handles async handlers
+ok 119 - withTrustedIpc handles async handlers
+  ---
+  duration_ms: 0.1097
+  ...
+# Subtest: withTrustedIpc returns custom default for untrusted event
+ok 120 - withTrustedIpc returns custom default for untrusted event
+  ---
+  duration_ms: 0.1872
+  ...
+# Subtest: withTrustedIpc returns custom object default for untrusted event
+ok 121 - withTrustedIpc returns custom object default for untrusted event
+  ---
+  duration_ms: 0.6142
+  ...
+# Subtest: withTrustedIpc handles handler errors gracefully
+ok 122 - withTrustedIpc handles handler errors gracefully
+  ---
+  duration_ms: 0.551
+  ...
+# Subtest: question routing passes projectBotUsername and masterNotifyMode with full fallback
+ok 123 - question routing passes projectBotUsername and masterNotifyMode with full fallback
+  ---
+  duration_ms: 1.8872
+  ...
+# Subtest: save-telegram-config forwards masterNotifyMode into validation and persists normalized value
+ok 124 - save-telegram-config forwards masterNotifyMode into validation and persists normalized value
+  ---
+  duration_ms: 1.6514
+  ...
+# Subtest: load-telegram-config includes masterNotifyMode defaults for missing-project and fallback/default paths
+ok 125 - load-telegram-config includes masterNotifyMode defaults for missing-project and fallback/default paths
+  ---
+  duration_ms: 0.6989
+  ...
+# Subtest: start-session preserves existing session when no explicit new-session choice is provided
+ok 126 - start-session preserves existing session when no explicit new-session choice is provided
+  ---
+  duration_ms: 0.9434
+  ...
+# Subtest: start-session clears existing session only when explicit new-session choice is provided
+ok 127 - start-session clears existing session only when explicit new-session choice is provided
+  ---
+  duration_ms: 0.8089
+  ...
+# Subtest: forwardQuestion off mode sends nothing
+ok 128 - forwardQuestion off mode sends nothing
+  ---
+  duration_ms: 0.7853
+  ...
+# Subtest: forwardQuestion ping mode sends short deep-link message without token
+ok 129 - forwardQuestion ping mode sends short deep-link message without token
+  ---
+  duration_ms: 0.7179
+  ...
+# Subtest: forwardQuestion full mode sends question text with deep-link and no token
+ok 130 - forwardQuestion full mode sends question text with deep-link and no token
+  ---
+  duration_ms: 0.3273
+  ...
+# Subtest: forwardQuestion normalizes @project_bot and uses deep-link mode
+ok 131 - forwardQuestion normalizes @project_bot and uses deep-link mode
+  ---
+  duration_ms: 0.1765
+  ...
+# Subtest: forwardQuestion falls back to reply token flow when project bot username is missing
+ok 132 - forwardQuestion falls back to reply token flow when project bot username is missing
+  ---
+  duration_ms: 0.6204
+  ...
+# Subtest: forwardQuestion falls back to token flow when project bot username is invalid
+ok 133 - forwardQuestion falls back to token flow when project bot username is invalid
+  ---
+  duration_ms: 0.2182
+  ...
+# Subtest: extractModelsFromError parses only model IDs from API 403 message
+ok 134 - extractModelsFromError parses only model IDs from API 403 message
+  ---
+  duration_ms: 1.7933
+  ...
+# Subtest: extractModelsFromError returns empty list when message has no model list
+ok 135 - extractModelsFromError returns empty list when message has no model list
+  ---
+  duration_ms: 0.2146
+  ...
+# Subtest: extractModelsFromError ignores trailing explanatory prose
+ok 136 - extractModelsFromError ignores trailing explanatory prose
+  ---
+  duration_ms: 0.201
+  ...
+# Subtest: fetchModels falls back to model names from API error response when /v1/models is unavailable
+ok 137 - fetchModels falls back to model names from API error response when /v1/models is unavailable
+  ---
+  duration_ms: 36.3552
+  ...
+# Subtest: listPlugins attaches manifest version metadata for marketplace plugins
+ok 138 - listPlugins attaches manifest version metadata for marketplace plugins
+  ---
+  duration_ms: 6.1664
+  ...
+# Subtest: listPlugins reads version metadata from versioned plugin cache layout
+ok 139 - listPlugins reads version metadata from versioned plugin cache layout
+  ---
+  duration_ms: 1.0831
+  ...
+# Subtest: listPlugins attaches recorded version metadata for context7 MCP entries
+ok 140 - listPlugins attaches recorded version metadata for context7 MCP entries
+  ---
+  duration_ms: 0.8099
+  ...
+# Subtest: listPlugins attaches recorded version metadata for detected GSD skill entries
+ok 141 - listPlugins attaches recorded version metadata for detected GSD skill entries
+  ---
+  duration_ms: 0.7649
+  ...
+# Subtest: listPlugins applies recorded version metadata to enabled Context7 plugin rows
+ok 142 - listPlugins applies recorded version metadata to enabled Context7 plugin rows
+  ---
+  duration_ms: 1.84
+  ...
+# Subtest: listPlugins infers GSD version from legacy VERSION file
+ok 143 - listPlugins infers GSD version from legacy VERSION file
+  ---
+  duration_ms: 0.822
+  ...
+# Subtest: listPlugins infers Context7 version from latest npm cache package
+ok 144 - listPlugins infers Context7 version from latest npm cache package
+  ---
+  duration_ms: 0.9705
+  ...
+# Subtest: listPlugins marks version as unknown when installed MCP has no recorded version
+ok 145 - listPlugins marks version as unknown when installed MCP has no recorded version
+  ---
+  duration_ms: 0.7121
+  ...
+# Subtest: listPlugins still deduplicates context7 between MCP config and recommended detection
+ok 146 - listPlugins still deduplicates context7 between MCP config and recommended detection
+  ---
+  duration_ms: 0.746
+  ...
+# Subtest: checkPluginUpdates returns latest version metadata for unknown Context7 current version
+ok 147 - checkPluginUpdates returns latest version metadata for unknown Context7 current version
+  ---
+  duration_ms: 6.0589
+  ...
+# Subtest: checkPluginUpdates resolves GSD npm package mapping and marks available updates
+ok 148 - checkPluginUpdates resolves GSD npm package mapping and marks available updates
+  ---
+  duration_ms: 3.0946
+  ...
+# Subtest: checkPluginUpdates returns stable metadata for marketplace plugins
+ok 149 - checkPluginUpdates returns stable metadata for marketplace plugins
+  ---
+  duration_ms: 1.436
+  ...
+# Subtest: normalizePrompt strips accidental double slash
+ok 150 - normalizePrompt strips accidental double slash
+  ---
+  duration_ms: 0.9902
+  ...
+# Subtest: normalizePrompt converts plugin:skill command to -p compatible form
+ok 151 - normalizePrompt converts plugin:skill command to -p compatible form
+  ---
+  duration_ms: 0.175
+  ...
+# Subtest: normalizePrompt keeps /model commands unchanged for CLI handling
+ok 152 - normalizePrompt keeps /model commands unchanged for CLI handling
+  ---
+  duration_ms: 0.197
+  ...
+# Subtest: shouldPassSessionModel disables configured --model only for /model slash commands
+ok 153 - shouldPassSessionModel disables configured --model only for /model slash commands
+  ---
+  duration_ms: 0.3692
+  ...
+# Subtest: normalizeCliResultError adds guidance for unavailable /model slash command
+ok 154 - normalizeCliResultError adds guidance for unavailable /model slash command
+  ---
+  duration_ms: 0.2815
+  ...
+# Subtest: normalizeCliResultError keeps unrelated errors unchanged
+ok 155 - normalizeCliResultError keeps unrelated errors unchanged
+  ---
+  duration_ms: 0.3963
+  ...
+# Subtest: parsePluginSlashCommand detects /plugin and /plugins with optional args
+ok 156 - parsePluginSlashCommand detects /plugin and /plugins with optional args
+  ---
+  duration_ms: 1.2631
+  ...
+# Subtest: buildCliArgs routes plugin slash command to claude plugins subcommand
+ok 157 - buildCliArgs routes plugin slash command to claude plugins subcommand
+  ---
+  duration_ms: 0.4687
+  ...
+# Subtest: buildCliArgs keeps print mode args for non-plugin prompts
+ok 158 - buildCliArgs keeps print mode args for non-plugin prompts
+  ---
+  duration_ms: 0.7067
+  ...
+# Subtest: buildCliArgs maps built-in slash commands to Claude CLI subcommands/flags
+ok 159 - buildCliArgs maps built-in slash commands to Claude CLI subcommands/flags
+  ---
+  duration_ms: 0.7621
+  ...
+# Subtest: buildCliArgs marks unsupported print-mode slash commands with explicit guidance
+ok 160 - buildCliArgs marks unsupported print-mode slash commands with explicit guidance
+  ---
+  duration_ms: 0.3593
+  ...
+# Subtest: resolveExecutionPlan chooses pty-fallback for interactive-only slash commands
+ok 161 - resolveExecutionPlan chooses pty-fallback for interactive-only slash commands
+  ---
+  duration_ms: 0.1872
+  ...
+# Subtest: resolveExecutionPlan keeps print mode when fallback disabled
+ok 162 - resolveExecutionPlan keeps print mode when fallback disabled
+  ---
+  duration_ms: 0.1128
+  ...
+# Subtest: applyPtyFallbackResult maps successful pty run into result object
+ok 163 - applyPtyFallbackResult maps successful pty run into result object
+  ---
+  duration_ms: 0.1824
+  ...
+# Subtest: applyPtyFallbackResult sets error for timeout/failure
+ok 164 - applyPtyFallbackResult sets error for timeout/failure
+  ---
+  duration_ms: 0.2205
+  ...
+# Subtest: _compareVersions returns correct ordering
+ok 165 - _compareVersions returns correct ordering
+  ---
+  duration_ms: 0.2188
+  ...
+# Subtest: _supportsSDKMode returns true when version >= SDK_MIN_VERSION
+ok 166 - _supportsSDKMode returns true when version >= SDK_MIN_VERSION
+  ---
+  duration_ms: 0.1003
+  ...
+# Subtest: _supportsSDKMode returns false when version < SDK_MIN_VERSION
+ok 167 - _supportsSDKMode returns false when version < SDK_MIN_VERSION
+  ---
+  duration_ms: 0.0833
+  ...
+# Subtest: _supportsSDKMode returns false when version is missing
+ok 168 - _supportsSDKMode returns false when version is missing
+  ---
+  duration_ms: 0.0608
+  ...
+# Subtest: _buildSDKModeArgs builds correct args with all options
+ok 169 - _buildSDKModeArgs builds correct args with all options
+  ---
+  duration_ms: 0.2092
+  ...
+# Subtest: _buildSDKModeArgs omits optional flags when not set
+ok 170 - _buildSDKModeArgs omits optional flags when not set
+  ---
+  duration_ms: 0.0784
+  ...
+# Subtest: _buildSDKModeArgs skips model when set to auto
+ok 171 - _buildSDKModeArgs skips model when set to auto
+  ---
+  duration_ms: 0.0644
+  ...
+# Subtest: _parseLine emits control-request for SDK control_request events
+ok 172 - _parseLine emits control-request for SDK control_request events
+  ---
+  duration_ms: 0.3833
+  ...
+# Subtest: _parseLine emits session-state for system session_state events
+ok 173 - _parseLine emits session-state for system session_state events
+  ---
+  duration_ms: 0.1699
+  ...
+# Subtest: sendControlResponse formats correct stdin message
+ok 174 - sendControlResponse formats correct stdin message
+  ---
+  duration_ms: 0.1977
+  ...
+# Subtest: sendKeepAlive sends keep_alive message
+ok 175 - sendKeepAlive sends keep_alive message
+  ---
+  duration_ms: 0.1306
+  ...
+# Subtest: _sendToStdin returns false when no process
+ok 176 - _sendToStdin returns false when no process
+  ---
+  duration_ms: 0.1456
+  ...
+# Subtest: _sendToStdin returns false when stdin destroyed
+ok 177 - _sendToStdin returns false when stdin destroyed
+  ---
+  duration_ms: 0.1067
+  ...
+# Subtest: sdkMode defaults to false
+ok 178 - sdkMode defaults to false
+  ---
+  duration_ms: 0.0531
+  ...
+# Subtest: classifyPtyRun marks timeout when timedOut is true
+ok 179 - classifyPtyRun marks timeout when timedOut is true
+  ---
+  duration_ms: 0.6851
+  ...
+# Subtest: classifyPtyRun marks success on zero exit code
+ok 180 - classifyPtyRun marks success on zero exit code
+  ---
+  duration_ms: 0.2356
+  ...
+# Subtest: normalizePtyError returns explicit bridge guidance
+ok 181 - normalizePtyError returns explicit bridge guidance
+  ---
+  duration_ms: 0.1801
+  ...
+# Subtest: extractQuestions returns questions array when present
+ok 182 - extractQuestions returns questions array when present
+  ---
+  duration_ms: 1.204
+  ...
+# Subtest: extractQuestions wraps single question into array
+ok 183 - extractQuestions wraps single question into array
+  ---
+  duration_ms: 0.1401
+  ...
+# Subtest: extractQuestions returns empty for no question fields
+ok 184 - extractQuestions returns empty for no question fields
+  ---
+  duration_ms: 0.0833
+  ...
+# Subtest: extractQuestions returns empty for null
+ok 185 - extractQuestions returns empty for null
+  ---
+  duration_ms: 0.0649
+  ...
+# Subtest: extractQuestions returns empty for undefined
+ok 186 - extractQuestions returns empty for undefined
+  ---
+  duration_ms: 0.1394
+  ...
+# Subtest: extractQuestions returns empty for empty object
+ok 187 - extractQuestions returns empty for empty object
+  ---
+  duration_ms: 0.0662
+  ...
+# Subtest: computeHealthStatus marks unhealthy when recommended tools are missing
+ok 188 - computeHealthStatus marks unhealthy when recommended tools are missing
+  ---
+  duration_ms: 2.2
+  ...
+# Subtest: resolveTrayIconPath prefers existing icon candidate and never falls back to exe path
+ok 189 - resolveTrayIconPath prefers existing icon candidate and never falls back to exe path
+  ---
+  duration_ms: 0.7255
+  ...
+# Subtest: resolveTrayIconPath checks resources root icon fallback candidate
+ok 190 - resolveTrayIconPath checks resources root icon fallback candidate
+  ---
+  duration_ms: 0.1449
+  ...
+# Subtest: getAppLogFilePath writes logs under userData/logs
+ok 191 - getAppLogFilePath writes logs under userData/logs
+  ---
+  duration_ms: 0.1104
+  ...
+# Subtest: isExpectedAutoUpdateFeed404 matches releases.atom 404 messages only
+ok 192 - isExpectedAutoUpdateFeed404 matches releases.atom 404 messages only
+  ---
+  duration_ms: 0.4125
+  ...
+# Subtest: summarizeAutoUpdateError strips headers and compacts multiline payload
+ok 193 - summarizeAutoUpdateError strips headers and compacts multiline payload
+  ---
+  duration_ms: 0.2974
+  ...
+# Subtest: evaluateToolInstallResult keeps Context7 warning as failure when not detected installed
+ok 194 - evaluateToolInstallResult keeps Context7 warning as failure when not detected installed
+  ---
+  duration_ms: 0.2451
+  ...
+# Subtest: evaluateToolInstallResult treats known Context7 warning as success only when detected installed
+ok 195 - evaluateToolInstallResult treats known Context7 warning as success only when detected installed
+  ---
+  duration_ms: 0.1442
+  ...
+# Subtest: evaluateToolInstallResult keeps generic non-zero exit as failure
+ok 196 - evaluateToolInstallResult keeps generic non-zero exit as failure
+  ---
+  duration_ms: 0.3859
+  ...
+# Subtest: shouldHideWindowToTray returns true only when not quitting and tray exists
+ok 197 - shouldHideWindowToTray returns true only when not quitting and tray exists
+  ---
+  duration_ms: 0.5312
+  ...
+# Subtest: computeHealthStatus matches recommended plugins by MCP key prefix
+ok 198 - computeHealthStatus matches recommended plugins by MCP key prefix
+  ---
+  duration_ms: 0.3559
+  ...
+# Subtest: shouldKeepAppAliveWithoutWindows returns true only when tray exists
+ok 199 - shouldKeepAppAliveWithoutWindows returns true only when tray exists
+  ---
+  duration_ms: 0.1548
+  ...
+# Subtest: parseInstallCommand splits simple command into executable and args
+ok 200 - parseInstallCommand splits simple command into executable and args
+  ---
+  duration_ms: 0.8428
+  ...
+# Subtest: parseInstallCommand rejects shell metacharacters
+ok 201 - parseInstallCommand rejects shell metacharacters
+  ---
+  duration_ms: 0.2693
+  ...
+# Subtest: isTrustedIpcSender allows only the main window sender
+ok 202 - isTrustedIpcSender allows only the main window sender
+  ---
+  duration_ms: 0.1543
+  ...
+# Subtest: applyCustomProviderToSettings removes plaintext token when secure storage is used
+ok 203 - applyCustomProviderToSettings removes plaintext token when secure storage is used
+  ---
+  duration_ms: 0.2565
+  ...
+# Subtest: applyCustomProviderToSettings preserves token in settings when secure storage is unavailable
+ok 204 - applyCustomProviderToSettings preserves token in settings when secure storage is unavailable
+  ---
+  duration_ms: 0.1339
+  ...
+# Subtest: applyCustomProviderToSettings preserves token when tokenMode is preserve
+ok 205 - applyCustomProviderToSettings preserves token when tokenMode is preserve
+  ---
+  duration_ms: 0.8516
+  ...
+# Subtest: applyCustomProviderToSettings clears token when tokenMode is clear
+ok 206 - applyCustomProviderToSettings clears token when tokenMode is clear
+  ---
+  duration_ms: 0.1213
+  ...
+# Subtest: classifyProviderFromBaseUrl detects cloud providers and custom hosts
+ok 207 - classifyProviderFromBaseUrl detects cloud providers and custom hosts
+  ---
+  duration_ms: 0.2871
+  ...
+# Subtest: enrichDetectionWithCustomProviderSecret infers auth when secure token exists
+ok 208 - enrichDetectionWithCustomProviderSecret infers auth when secure token exists
+  ---
+  duration_ms: 0.184
+  ...
+# Subtest: buildCorruptBackupPath appends timestamped corrupt backup suffix
+ok 209 - buildCorruptBackupPath appends timestamped corrupt backup suffix
+  ---
+  duration_ms: 0.584
+  ...
+# Subtest: safeWriteFileAtomic writes via temp file and renames
+ok 210 - safeWriteFileAtomic writes via temp file and renames
+  ---
+  duration_ms: 0.2217
+  ...
+# Subtest: safeWriteFileAtomic cleans up temp file on rename failure
+ok 211 - safeWriteFileAtomic cleans up temp file on rename failure
+  ---
+  duration_ms: 0.1279
+  ...
+# Subtest: backupFileBeforeWrite creates a .bak copy before modifying
+ok 212 - backupFileBeforeWrite creates a .bak copy before modifying
+  ---
+  duration_ms: 0.1592
+  ...
+# Subtest: backupFileBeforeWrite returns ok false when source does not exist
+ok 213 - backupFileBeforeWrite returns ok false when source does not exist
+  ---
+  duration_ms: 0.1194
+  ...
+# Subtest: classifyCatchAction categorizes expected vs unexpected errors
+ok 214 - classifyCatchAction categorizes expected vs unexpected errors
+  ---
+  duration_ms: 0.1094
+  ...
+# Subtest: preserveCorruptDbFile renames corrupt DB file to backup path
+ok 215 - preserveCorruptDbFile renames corrupt DB file to backup path
+  ---
+  duration_ms: 0.2305
+  ...
+# Subtest: logger rotation: _rotateIfNeeded moves files correctly
+ok 216 - logger rotation: _rotateIfNeeded moves files correctly
+  ---
+  duration_ms: 4.3809
+  ...
+# Subtest: question-routing debug log is emitted for first question event
+ok 217 - question-routing debug log is emitted for first question event
+  ---
+  duration_ms: 2.7899
+  ...
+# Subtest: question-routing debug log dedupes identical events inside throttle window
+ok 218 - question-routing debug log dedupes identical events inside throttle window
+  ---
+  duration_ms: 0.5901
+  ...
+# Subtest: question-routing debug log emits again after throttle window
+ok 219 - question-routing debug log emits again after throttle window
+  ---
+  duration_ms: 0.5471
+  ...
+# Subtest: projectPathHash converts Windows path
+ok 220 - projectPathHash converts Windows path
+  ---
+  duration_ms: 0.8016
+  ...
+# Subtest: projectPathHash converts spaces
+ok 221 - projectPathHash converts spaces
+  ---
+  duration_ms: 0.1608
+  ...
+# Subtest: projectPathHash converts Unix path
+ok 222 - projectPathHash converts Unix path
+  ---
+  duration_ms: 0.2002
+  ...
+# Subtest: projectPathHash is deterministic
+ok 223 - projectPathHash is deterministic
+  ---
+  duration_ms: 0.1412
+  ...
+# Subtest: projectPathHash handles forward slashes
+ok 224 - projectPathHash handles forward slashes
+  ---
+  duration_ms: 0.1339
+  ...
+# Subtest: projectPathHash handles single segment
+ok 225 - projectPathHash handles single segment
+  ---
+  duration_ms: 0.8784
+  ...
+# Subtest: listSessions returns prompt preview and latest-turn token metadata from session jsonl
+ok 226 - listSessions returns prompt preview and latest-turn token metadata from session jsonl
+  ---
+  duration_ms: 5.7735
+  ...
+# Subtest: listSessions reads usage from file tail when session file is larger than usage scan window
+ok 227 - listSessions reads usage from file tail when session file is larger than usage scan window
+  ---
+  duration_ms: 6.3742
+  ...
+# Subtest: getClaudeCommand returns cmd and shellFlag
+ok 228 - getClaudeCommand returns cmd and shellFlag
+  ---
+  duration_ms: 1.5176
+  ...
+# Subtest: getClaudeCommand shellFlag is true on win32 when no full path
+ok 229 - getClaudeCommand shellFlag is true on win32 when no full path
+  ---
+  duration_ms: 0.638
+  ...
+# Subtest: killClaudeProcess does not throw on null/undefined
+ok 230 - killClaudeProcess does not throw on null/undefined
+  ---
+  duration_ms: 0.4914
+  ...
+# Subtest: summarize Bash returns command
+ok 231 - summarize Bash returns command
+  ---
+  duration_ms: 0.9045
+  ...
+# Subtest: summarize Read returns path
+ok 232 - summarize Read returns path
+  ---
+  duration_ms: 0.1211
+  ...
+# Subtest: summarize Write returns path
+ok 233 - summarize Write returns path
+  ---
+  duration_ms: 0.0757
+  ...
+# Subtest: summarize Edit returns path
+ok 234 - summarize Edit returns path
+  ---
+  duration_ms: 0.0676
+  ...
+# Subtest: summarize Grep returns pattern
+ok 235 - summarize Grep returns pattern
+  ---
+  duration_ms: 0.1512
+  ...
+# Subtest: summarize Glob returns pattern
+ok 236 - summarize Glob returns pattern
+  ---
+  duration_ms: 0.0705
+  ...
+# Subtest: summarize null input
+ok 237 - summarize null input
+  ---
+  duration_ms: 0.1222
+  ...
+# Subtest: summarize fallback to first string
+ok 238 - summarize fallback to first string
+  ---
+  duration_ms: 0.146
+  ...
+# Subtest: summarize truncates long commands
+ok 239 - summarize truncates long commands
+  ---
+  duration_ms: 0.343
+  ...
+# Subtest: summarize WebFetch returns url
+ok 240 - summarize WebFetch returns url
+  ---
+  duration_ms: 0.3028
+  ...
+# Subtest: detect returns null when superpowers.enabled is false
+ok 241 - detect returns null when superpowers.enabled is false
+  ---
+  duration_ms: 0.8228
+  ...
+# Subtest: detect returns null when superpowersInstalled is false
+ok 242 - detect returns null when superpowersInstalled is false
+  ---
+  duration_ms: 0.1275
+  ...
+# Subtest: classifyQuestion returns unknown when superpowers.enabled is false
+ok 243 - classifyQuestion returns unknown when superpowers.enabled is false
+  ---
+  duration_ms: 0.2099
+  ...
+# Subtest: classifyQuestion returns unknown when superpowersInstalled is false
+ok 244 - classifyQuestion returns unknown when superpowersInstalled is false
+  ---
+  duration_ms: 0.1026
+  ...
+# Subtest: autoAnswer returns null when superpowersInstalled is false from runtime config override
+ok 245 - autoAnswer returns null when superpowersInstalled is false from runtime config override
+  ---
+  duration_ms: 0.2328
+  ...
+# Subtest: detectAutoNext returns null when superpowersInstalled is false
+ok 246 - detectAutoNext returns null when superpowersInstalled is false
+  ---
+  duration_ms: 0.191
+  ...
+# Subtest: detectDerailment returns null when superpowersInstalled is false
+ok 247 - detectDerailment returns null when superpowersInstalled is false
+  ---
+  duration_ms: 0.1257
+  ...
+# Subtest: autoAnswer still works when superpowers is active
+ok 248 - autoAnswer still works when superpowers is active
+  ---
+  duration_ms: 0.3529
+  ...
+# Subtest: isAuthorized returns true when no allowedUsers (open access)
+ok 249 - isAuthorized returns true when no allowedUsers (open access)
+  ---
+  duration_ms: 0.6666
+  ...
+# Subtest: isAuthorized matches by username
+ok 250 - isAuthorized matches by username
+  ---
+  duration_ms: 0.1066
+  ...
+# Subtest: isAuthorized matches by numeric ID
+ok 251 - isAuthorized matches by numeric ID
+  ---
+  duration_ms: 0.0721
+  ...
+# Subtest: isAuthorized rejects unauthorized user
+ok 252 - isAuthorized rejects unauthorized user
+  ---
+  duration_ms: 0.0695
+  ...
+# Subtest: isAuthorized handles null allowedUsers
+ok 253 - isAuthorized handles null allowedUsers
+  ---
+  duration_ms: 0.1427
+  ...
+# Subtest: isAuthorized handles undefined username with ID match
+ok 254 - isAuthorized handles undefined username with ID match
+  ---
+  duration_ms: 0.0655
+  ...
+# Subtest: projectTokenFileName produces deterministic hash
+ok 255 - projectTokenFileName produces deterministic hash
+  ---
+  duration_ms: 1.1222
+  ...
+# Subtest: projectTokenFileName differs for different paths
+ok 256 - projectTokenFileName differs for different paths
+  ---
+  duration_ms: 0.7794
+  ...
+# Subtest: projectTokenFileName hash is 12 chars
+ok 257 - projectTokenFileName hash is 12 chars
+  ---
+  duration_ms: 0.1465
+  ...
+# Subtest: telegram-secure exports all expected functions
+ok 258 - telegram-secure exports all expected functions
+  ---
+  duration_ms: 0.411
+  ...
+# Subtest: telegram-secure uses safeStorage encrypt/decrypt
+ok 259 - telegram-secure uses safeStorage encrypt/decrypt
+  ---
+  duration_ms: 0.2382
+  ...
+# Subtest: telegram-secure checks encryption availability
+ok 260 - telegram-secure checks encryption availability
+  ---
+  duration_ms: 0.1871
+  ...
+# Subtest: telegram-secure returns null for missing file
+ok 261 - telegram-secure returns null for missing file
+  ---
+  duration_ms: 0.2535
+  ...
+# [auto-claude:warn] telegram: Failed to get bot username — getMe failed
+# Subtest: TelegramBridge constructor initializes botUsername to null
+ok 262 - TelegramBridge constructor initializes botUsername to null
+  ---
+  duration_ms: 10.0616
+  ...
+# Subtest: TelegramBridge.start assigns token and stores bot username after getMe success
+ok 263 - TelegramBridge.start assigns token and stores bot username after getMe success
+  ---
+  duration_ms: 1.9581
+  ...
+# Subtest: TelegramBridge.start getMe rejection leaves botUsername null and does not throw
+ok 264 - TelegramBridge.start getMe rejection leaves botUsername null and does not throw
+  ---
+  duration_ms: 1.8512
+  ...
+# Subtest: TelegramBridge.stop resets botUsername to null
+ok 265 - TelegramBridge.stop resets botUsername to null
+  ---
+  duration_ms: 0.6082
+  ...
+# Subtest: checkForUpdate logs subprocess start and timeout outcome
+ok 266 - checkForUpdate logs subprocess start and timeout outcome
+  ---
+  duration_ms: 2.4122
+  ...
+# Subtest: checkForUpdate logs parse failure with output preview when status is undetermined
+ok 267 - checkForUpdate logs parse failure with output preview when status is undetermined
+  ---
+  duration_ms: 0.8711
+  ...
+# Subtest: validateConfig preserves runtime slash fallback keys
+ok 268 - validateConfig preserves runtime slash fallback keys
+  ---
+  duration_ms: 2.2466
+  ...
+# Subtest: validateConfig clamps invalid runtime timeout
+ok 269 - validateConfig clamps invalid runtime timeout
+  ---
+  duration_ms: 0.1529
+  ...
+# Subtest: validateProjectDir rejects null
+ok 270 - validateProjectDir rejects null
+  ---
+  duration_ms: 0.1435
+  ...
+# Subtest: validateProjectDir rejects empty
+ok 271 - validateProjectDir rejects empty
+  ---
+  duration_ms: 0.0781
+  ...
+# Subtest: validateProjectDir rejects dangerous chars
+ok 272 - validateProjectDir rejects dangerous chars
+  ---
+  duration_ms: 0.1991
+  ...
+# Subtest: validateProjectDir rejects nonexistent
+ok 273 - validateProjectDir rejects nonexistent
+  ---
+  duration_ms: 0.1991
+  ...
+# Subtest: validateProjectDir accepts valid dir
+ok 274 - validateProjectDir accepts valid dir
+  ---
+  duration_ms: 0.358
+  ...
+# Subtest: validateProjectDir rejects too long
+ok 275 - validateProjectDir rejects too long
+  ---
+  duration_ms: 0.1
+  ...
+# Subtest: validatePrompt accepts empty
+ok 276 - validatePrompt accepts empty
+  ---
+  duration_ms: 0.2552
+  ...
+# Subtest: validatePrompt rejects non-string
+ok 277 - validatePrompt rejects non-string
+  ---
+  duration_ms: 0.3053
+  ...
+# Subtest: validatePrompt rejects oversized
+ok 278 - validatePrompt rejects oversized
+  ---
+  duration_ms: 0.1346
+  ...
+# Subtest: validateMasterTelegramConfig rejects non-object
+ok 279 - validateMasterTelegramConfig rejects non-object
+  ---
+  duration_ms: 0.1311
+  ...
+# Subtest: validateMasterTelegramConfig sanitizes valid
+ok 280 - validateMasterTelegramConfig sanitizes valid
+  ---
+  duration_ms: 0.1128
+  ...
+# Subtest: validateDistinctTelegramTokens rejects duplicates
+ok 281 - validateDistinctTelegramTokens rejects duplicates
+  ---
+  duration_ms: 0.0985
+  ...
+# Subtest: validateDistinctTelegramTokens accepts different
+ok 282 - validateDistinctTelegramTokens accepts different
+  ---
+  duration_ms: 0.0788
+  ...
+# Subtest: validateProjectTelegramConfig rejects null
+ok 283 - validateProjectTelegramConfig rejects null
+  ---
+  duration_ms: 0.1073
+  ...
+# Subtest: validateProjectTelegramConfig defaults masterNotifyMode to full
+ok 284 - validateProjectTelegramConfig defaults masterNotifyMode to full
+  ---
+  duration_ms: 0.0794
+  ...
+# Subtest: validateProjectTelegramConfig accepts ping masterNotifyMode
+ok 285 - validateProjectTelegramConfig accepts ping masterNotifyMode
+  ---
+  duration_ms: 0.0644
+  ...
+# Subtest: validateProjectTelegramConfig coerces invalid masterNotifyMode to full
+ok 286 - validateProjectTelegramConfig coerces invalid masterNotifyMode to full
+  ---
+  duration_ms: 0.05
+  ...
+# Subtest: validateResponse rejects empty
+ok 287 - validateResponse rejects empty
+  ---
+  duration_ms: 0.0564
+  ...
+# Subtest: validateResponse rejects oversized
+ok 288 - validateResponse rejects oversized
+  ---
+  duration_ms: 0.6463
+  ...
+# Subtest: validateResponse accepts valid
+ok 289 - validateResponse accepts valid
+  ---
+  duration_ms: 0.0971
+  ...
+1..289
+# tests 289
+# suites 0
+# pass 289
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 766.6768

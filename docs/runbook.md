@@ -12,7 +12,8 @@
 
 ## Hook Cleanup
 - Auto-installed to: `<projectDir>/.claude/settings.json`
-- Manual uninstall: `node install-hooks.js --uninstall <projectDir>`
+- Manual uninstall: `node install-hooks.js <projectDir> --uninstall`
+- Also accepted: `node install-hooks.js --uninstall <projectDir>`
 - Stale hook detection: hooks have marker `auto-claude-hook.js`. If marker not found, hooks are re-installed automatically.
 
 ## Stuck Session Recovery

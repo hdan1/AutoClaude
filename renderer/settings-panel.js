@@ -163,6 +163,33 @@
       recDiv.appendChild(btn);
       recDiv.appendChild(resultSpan);
       content.appendChild(recDiv);
+
+      const diagnosticsDiv=document.createElement('div');
+      diagnosticsDiv.style.cssText='margin-top:18px;padding-top:14px;border-top:1px solid var(--bdr)';
+      const diagnosticsLabel=document.createElement('label');
+      diagnosticsLabel.className='settings-label';
+      diagnosticsLabel.textContent='Diagnostics';
+      diagnosticsDiv.appendChild(diagnosticsLabel);
+      const diagnosticsBox=document.createElement('pre');
+      diagnosticsBox.style.cssText='margin:6px 0 0;padding:8px;border:1px solid var(--bdr);border-radius:6px;background:var(--bg2);color:var(--tx2);font-size:11px;white-space:pre-wrap';
+      diagnosticsBox.textContent='Loading diagnostics...';
+      diagnosticsDiv.appendChild(diagnosticsBox);
+      content.appendChild(diagnosticsDiv);
+      try{
+        const d=await window.api.getDiagnostics({tabId:document.querySelector('.t.active')?.dataset?.tabId||null});
+        diagnosticsBox.textContent=[
+          `App: ${d.appVersion||'unknown'}`,
+          `Claude: ${d.claudeVersion||'unknown'} (${d.authType||'no auth'})`,
+          `Path: ${d.claudePath||'unknown'}`,
+          `Workspace: ${d.workspacePath||'none'}`,
+          `Updater: ${d.updaterStatus||'idle'}`,
+          `Telemetry degraded: ${d.telemetryDegraded?'yes':'no'}`,
+          `Last error: ${d.lastError||'none'}`,
+          `Logs: ${d.logPath||'unknown'}`,
+        ].join('\n');
+      }catch{
+        diagnosticsBox.textContent='Diagnostics unavailable';
+      }
     }
   }
 
@@ -585,12 +612,12 @@
       if(tok)cfg.botToken=tok;
       const res=await window.api.saveMasterTelegramConfig(cfg);
       if(res.ok){setTgMsg('Saved','ok');$('sTgToken').value='';$('sTgToken').placeholder='(saved — enter new to change)'}
-      else setTgMsg(res.error||'Save failed','err');
+      else setTgMsg(window.operationalStatus.renderOperationalMessage({summary:'Save failed',details:res.error||'unknown error',nextSteps:['retry saving Telegram settings']},'Save failed'),'err');
     };
     $('sTgTest').onclick=async()=>{
       const res=await window.api.loadMasterTelegramConfig();
-      if(!res.hasToken){setTgMsg('No token saved','err');return}
-      setTgMsg('Bot is '+(res.enabled?'enabled':'disabled'),'ok');
+      if(!res.hasToken){setTgMsg(window.operationalStatus.renderOperationalMessage({summary:'No token saved',nextSteps:['add a bot token in Settings']},'No token saved'),'err');return}
+      setTgMsg(window.operationalStatus.renderOperationalMessage({summary:'Telegram bot status',details:(res.enabled?'enabled':'disabled'),nextSteps:[]},'Telegram bot status'),'ok');
     };
   }
 

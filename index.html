@@ -545,6 +545,7 @@ body{margin:0;background:var(--bg);color:var(--tx);font-family:Segoe UI,system-u
       <strong>Plugins</strong> - Manage Claude Code plugins</p>
       <div class="help-tip">Settings are saved automatically and persist across restarts.</div>
     </div>
+    <div id="helpDynamicSteps"></div>
   </div>
   <div class="help-footer">
     <div class="help-dots" id="helpDots"></div>
@@ -1322,7 +1323,8 @@ window.api.onHideQuestion(d=>{const tabId=d.tabId||'default';const qp=$t(tabId,'
 window.api.onUpdateStatus(d=>{
   const banner=$('updateBanner');
   if(d.status==='ready'){
-    $('updateText').textContent='Update v'+d.version+' ready';
+    const version=d.meta?.version||d.version;
+    $('updateText').textContent=version?`Update v${version} ready`:'Update ready';
     banner.style.display='block';
   }
 });
@@ -1350,6 +1352,7 @@ $('layoutToggle').addEventListener('click',e=>{const btn=e.target.closest('butto
 createTab();
 
 </script>
+<script src="renderer/operational-status.js"></script>
 <script src="renderer/settings-panel.js"></script>
 <script src="renderer/claude-code-manager.js"></script>
 <script src="renderer/setup-health-check.js"></script>
