@@ -121,6 +121,7 @@ class ClaudeProxy extends EventEmitter {
       costUsd: 0, numTurns: 0, model: '', sessionId: null,
       timeline: [], hookEvents: [], toolCalls: [], fullText: '',
       resultText: null, error: null, exitCode: null, askedQuestion: false,
+      hasTrustedInputTokens: false,
     };
 
     this._startHookWatcher(projectDir, result);
@@ -357,6 +358,7 @@ class ClaudeProxy extends EventEmitter {
     if (ptyText) {
       result.fullText = ptyText;
       result.inputTokens = Math.ceil(ptyText.length / 4);
+      result.hasTrustedInputTokens = false;
     }
   }
 

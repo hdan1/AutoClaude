@@ -182,8 +182,10 @@ class SessionManager extends EventEmitter {
       // Context recovery
       const ctx = loop.checkContextRecovery(contextGuard, result, session.state.model, this.config);
       if (ctx) {
-        const pctStr = (ctx.pct * 100).toFixed(0);
-        this.send(tabId, 'log', { type: 'system', text: `\u26a0 Context at ${pctStr}% \u2014 saving state and starting fresh session (${ctx.count}/${ctx.maxRecoveries})` });
+        const ctxMsg = ctx.pct > 0
+          ? `\u26a0 Context at ${(ctx.pct * 100).toFixed(0)}% \u2014 saving state and starting fresh session (${ctx.count}/${ctx.maxRecoveries})`
+          : `\u26a0 Context recovery triggered \u2014 saving state and starting fresh session (${ctx.count}/${ctx.maxRecoveries})`;
+        this.send(tabId, 'log', { type: 'system', text: ctxMsg });
         this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Context Recovery', body: ctx.reason });
 
         const handoffPrompt = contextGuard.getHandoffPrompt(session.state);
