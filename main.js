@@ -1388,7 +1388,10 @@ ipcMain.handle('cleanup-prompt-images', withTrustedIpc('cleanup-prompt-images', 
 ipcMain.on('send-response', withTrustedIpc('send-response', (event, data) => {
   const tabId = data?.tabId || 'default';
   const session = sessionManager.get(tabId);
-  if (!session?.state.running) return;
+  if (!session?.state.running) {
+    sendToTab(tabId, 'log', { type: 'stderr', text: 'Cannot send answer: session is not running.' });
+    return;
+  }
   const response = typeof data === 'string' ? data : data.text || data.response;
   const respVal = validateResponse(response);
   if (!respVal.valid) {
@@ -1404,7 +1407,10 @@ ipcMain.on('send-response', withTrustedIpc('send-response', (event, data) => {
 ipcMain.on('question-answer', withTrustedIpc('question-answer', (event, data) => {
   const tabId = data?.tabId || 'default';
   const session = sessionManager.get(tabId);
-  if (!session?.state.running) return;
+  if (!session?.state.running) {
+    sendToTab(tabId, 'log', { type: 'stderr', text: 'Cannot send answer: session is not running.' });
+    return;
+  }
   const answer = typeof data === 'string' ? data : data.answer || data.text;
   const respVal = validateResponse(answer);
   if (!respVal.valid) return;

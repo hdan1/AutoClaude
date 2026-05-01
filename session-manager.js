@@ -100,6 +100,16 @@ class SessionManager extends EventEmitter {
     const session = this.sessions.get(tabId);
     if (!session) return;
 
+    session.waitingForAnswer = false;
+    session.pendingResponse = null;
+    session._lastQuestionData = null;
+    if (session._answerTimer) {
+      clearTimeout(session._answerTimer);
+      session._answerTimer = null;
+    }
+    session.answerResolve = null;
+    this.send(tabId, 'hide-question', {});
+
     session.state.running = true;
     session.state.activityType = 'idle';
     session.state.message = 'Starting session...';
@@ -306,6 +316,14 @@ class SessionManager extends EventEmitter {
     session.state.running = false;
     session.state.currentStep = 'session-complete';
     session.state.message = 'Session complete';
+    session.waitingForAnswer = false;
+    session.pendingResponse = null;
+    session._lastQuestionData = null;
+    session.answerResolve = null;
+    if (session._answerTimer) {
+      clearTimeout(session._answerTimer);
+      session._answerTimer = null;
+    }
     // Accumulate into project-level stats and persist
     session.state.projectInputTokens += session.state.totalInputTokens;
     session.state.projectOutputTokens += session.state.totalOutputTokens;
@@ -314,6 +332,7 @@ class SessionManager extends EventEmitter {
     this._saveProjectStats(session);
     this.emit('notify', { type: 'complete', title: 'Auto Claude \u2014 Session Complete', body: 'Claude session ended.' });
     this.emit('session-complete', { tabId, sessionId: session.state.sessionId });
+    this.send(tabId, 'hide-question', {});
     this.send(tabId, 'session-complete', {
       sessionId: session.state.sessionId,
       inputTokens: result ? result.inputTokens : 0,
@@ -350,6 +369,9 @@ class SessionManager extends EventEmitter {
     session.state.activeTool = null;
     session.state.activeSkill = null;
     session.state.skillSource = null;
+    session.waitingForAnswer = false;
+    session.pendingResponse = null;
+    session._lastQuestionData = null;
     if (session.proxy) {
       await session.proxy.kill();
       session.proxy.emit('response-ready', null);
@@ -357,6 +379,11 @@ class SessionManager extends EventEmitter {
     }
     // Unblock any pending answer wait
     if (session.answerResolve) { session.answerResolve(); session.answerResolve = null; }
+    if (session._answerTimer) {
+      clearTimeout(session._answerTimer);
+      session._answerTimer = null;
+    }
+    this.send(tabId, 'hide-question', {});
     this.sendState(tabId);
     this.emit('save-status', tabId);
     this._clearResumeState(tabId, session);
