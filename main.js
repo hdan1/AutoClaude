@@ -137,6 +137,48 @@ function refreshWorkflowAvailability() {
   }
 }
 
+// ── Plugin ↔ Settings Sync ──────────────────────
+// When gsd.enabled or superpowers.enabled is toggled in settings,
+// also enable/disable the corresponding Claude Code plugin, and vice versa.
+const SETTING_TO_PLUGIN_MAP = {
+  'gsd.enabled': { match: (p) => /^gsd@/i.test(p.key) || p.name === 'gsd', availabilityKey: 'gsdInstalled' },
+  'superpowers.enabled': { match: (p) => /^superpowers@/i.test(p.key) || p.name === 'superpowers', availabilityKey: 'superpowersInstalled' },
+};
+
+function syncPluginStateForSetting(key, value) {
+  const mapping = SETTING_TO_PLUGIN_MAP[key];
+  if (!mapping) return;
+  const enabled = value !== false && value !== 'false';
+  try {
+    const pluginData = claudeDetector.listPlugins();
+    const installed = Array.isArray(pluginData?.installed) ? pluginData.installed : [];
+    const target = installed.find(mapping.match);
+    if (!target) return;
+    if (target.enabled === enabled) return;
+    claudeDetector.togglePlugin(target.key, enabled);
+    logger.info('plugin-sync', `${key}=${enabled} → toggled plugin "${target.key}" to ${enabled}`);
+    refreshWorkflowAvailability();
+  } catch (err) {
+    logger.warn('plugin-sync', `Failed to sync plugin for ${key}: ${err.message}`);
+  }
+}
+
+// Reverse sync: when a plugin is toggled via Claude Code Manager UI,
+// update the corresponding settings DB entry.
+const PLUGIN_TO_SETTING_MAP = [
+  { match: (key) => /^gsd@/i.test(key) || key === 'gsd', settingKey: 'gsd.enabled' },
+  { match: (key) => /^superpowers@/i.test(key) || key === 'superpowers', settingKey: 'superpowers.enabled' },
+];
+
+function syncSettingForPlugin(pluginKey, enabled) {
+  const mapping = PLUGIN_TO_SETTING_MAP.find(m => m.match(pluginKey));
+  if (!mapping) return;
+  const current = settingsDb.get(mapping.settingKey);
+  if (current === enabled) return;
+  settingsDb.set(mapping.settingKey, enabled);
+  applyConfigInPlace(settingsDb.buildConfigObject(config));
+  logger.info('plugin-sync', `plugin "${pluginKey}"=${enabled} → synced ${mapping.settingKey}=${enabled}`);
+}
 
 // Initialize logger with persistent user-level log file
 const APP_LOG_FILE = getAppLogFilePath(app.getPath('userData'));
@@ -1314,6 +1356,7 @@ ipcMain.handle('set-setting', withTrustedIpc('set-setting', (event, { key, value
   settingsDb.set(key, value);
   applyConfigInPlace(settingsDb.buildConfigObject(config));
   refreshWorkflowAvailability();
+  syncPluginStateForSetting(key, value);
   return { ok: true };
 }, trustDeps));
 
@@ -1697,6 +1740,7 @@ require('./lib/ipc-claude-manager').register(ipcMain, {
   saveCustomProviderToken: (t) => saveCustomProviderToken(app.getPath('userData'), t),
   clearCustomProviderToken: () => clearCustomProviderToken(app.getPath('userData')),
   isEncryptionAvailable, APP_LOG_FILE, shell,
+  syncSettingForPlugin,
 });
 
 // ── Startup Health Check ─────────────────────────

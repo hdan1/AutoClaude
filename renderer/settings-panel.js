@@ -101,27 +101,7 @@
         const inp=field.querySelector('input');
         inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur()});
         if(key==='defaultPrompt'){
-          let pkIdx=-1;
-          let pickingCmd=false;
-          inp.onblur=()=>{setTimeout(()=>{if(!pickingCmd)saveSetting(key,inp.value)},150)};
-          const pk=field.querySelector('#settingsCmdPicker');
-          inp.addEventListener('input',()=>{
-            const v=inp.value;
-            if(!v.startsWith('/')){pk.classList.remove('vis');pkIdx=-1;return}
-            const items=buildPickerItems(v);const cmds=items.filter(i=>i.type==='cmd');
-            if(!cmds.length){pk.classList.remove('vis');pkIdx=-1;return}
-            pk.innerHTML='';let ci=0;
-            items.forEach(item=>{if(item.type==='header'){const h=document.createElement('div');h.className='cmd-cat';h.textContent=item.text;pk.appendChild(h)}else{const d=document.createElement('div');d.className='cmd-item'+(ci===pkIdx?' sel':'');d.innerHTML=`<span class="cn">${esc(item.cmd)}</span><span class="cd">${esc(item.desc)}</span>`;d.onmousedown=()=>{pickingCmd=true};d.onclick=()=>{inp.value=item.cmd;pk.classList.remove('vis');pkIdx=-1;pickingCmd=false;saveSetting(key,item.cmd)};pk.appendChild(d);ci++}});
-            pk.classList.add('vis');
-          });
-          inp.addEventListener('keydown',e=>{
-            if(!pk.classList.contains('vis'))return;
-            const items=pk.querySelectorAll('.cmd-item');
-            if(e.key==='ArrowDown'){e.preventDefault();pkIdx=Math.min(pkIdx+1,items.length-1);items.forEach((it,i)=>it.classList.toggle('sel',i===pkIdx))}
-            else if(e.key==='ArrowUp'){e.preventDefault();pkIdx=Math.max(pkIdx-1,0);items.forEach((it,i)=>it.classList.toggle('sel',i===pkIdx))}
-            else if((e.key==='Enter'||e.key==='Tab')&&pkIdx>=0&&items[pkIdx]){e.preventDefault();items[pkIdx].click()}
-            else if(e.key==='Escape'){pk.classList.remove('vis');pkIdx=-1}
-          });
+          attachCmdPicker(inp, field.querySelector('#settingsCmdPicker'), key);
         } else {
           inp.onblur=()=>saveSetting(key,inp.value);
         }
@@ -195,6 +175,28 @@
 
   function escHtml(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
 
+  function attachCmdPicker(inp, pickerEl, key) {
+    let pkIdx=-1;let pickingCmd=false;
+    inp.onblur=()=>{setTimeout(()=>{if(!pickingCmd)saveSetting(key,inp.value)},150)};
+    inp.addEventListener('input',()=>{
+      const v=inp.value;
+      if(!v.startsWith('/')){pickerEl.classList.remove('vis');pkIdx=-1;return}
+      const items=buildPickerItems(v);const cmds=items.filter(i=>i.type==='cmd');
+      if(!cmds.length){pickerEl.classList.remove('vis');pkIdx=-1;return}
+      pickerEl.innerHTML='';let ci=0;
+      items.forEach(item=>{if(item.type==='header'){const h=document.createElement('div');h.className='cmd-cat';h.textContent=item.text;pickerEl.appendChild(h)}else{const d=document.createElement('div');d.className='cmd-item'+(ci===pkIdx?' sel':'');d.innerHTML=`<span class="cn">${esc(item.cmd)}</span><span class="cd">${esc(item.desc)}</span>`;d.onmousedown=()=>{pickingCmd=true};d.onclick=()=>{inp.value=item.cmd;pickerEl.classList.remove('vis');pkIdx=-1;pickingCmd=false;saveSetting(key,item.cmd)};pickerEl.appendChild(d);ci++}});
+      pickerEl.classList.add('vis');
+    });
+    inp.addEventListener('keydown',e=>{
+      if(!pickerEl.classList.contains('vis'))return;
+      const items=pickerEl.querySelectorAll('.cmd-item');
+      if(e.key==='ArrowDown'){e.preventDefault();pkIdx=Math.min(pkIdx+1,items.length-1);items.forEach((it,i)=>it.classList.toggle('sel',i===pkIdx))}
+      else if(e.key==='ArrowUp'){e.preventDefault();pkIdx=Math.max(pkIdx-1,0);items.forEach((it,i)=>it.classList.toggle('sel',i===pkIdx))}
+      else if((e.key==='Enter'||e.key==='Tab')&&pkIdx>=0&&items[pkIdx]){e.preventDefault();items[pkIdx].click()}
+      else if(e.key==='Escape'){pickerEl.classList.remove('vis');pkIdx=-1}
+    });
+  }
+
   async function saveSetting(key,value){
     await window.api.setSetting(key,value);
     const indicator=content.querySelector(`[data-saved="${key}"]`);
@@ -221,26 +223,7 @@
         const inp=field.querySelector('input');
         inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur()});
         if(key==='defaultPrompt'){
-          let pkIdx=-1;let pickingCmd=false;
-          inp.onblur=()=>{setTimeout(()=>{if(!pickingCmd)saveSetting(key,inp.value)},150)};
-          const pk=field.querySelector('#settingsCmdPicker');
-          inp.addEventListener('input',()=>{
-            const v=inp.value;
-            if(!v.startsWith('/')){pk.classList.remove('vis');pkIdx=-1;return}
-            const items=buildPickerItems(v);const cmds=items.filter(i=>i.type==='cmd');
-            if(!cmds.length){pk.classList.remove('vis');pkIdx=-1;return}
-            pk.innerHTML='';let ci=0;
-            items.forEach(item=>{if(item.type==='header'){const h=document.createElement('div');h.className='cmd-cat';h.textContent=item.text;pk.appendChild(h)}else{const d=document.createElement('div');d.className='cmd-item'+(ci===pkIdx?' sel':'');d.innerHTML=`<span class="cn">${esc(item.cmd)}</span><span class="cd">${esc(item.desc)}</span>`;d.onmousedown=()=>{pickingCmd=true};d.onclick=()=>{inp.value=item.cmd;pk.classList.remove('vis');pkIdx=-1;pickingCmd=false;saveSetting(key,item.cmd)};pk.appendChild(d);ci++}});
-            pk.classList.add('vis');
-          });
-          inp.addEventListener('keydown',e=>{
-            if(!pk.classList.contains('vis'))return;
-            const items=pk.querySelectorAll('.cmd-item');
-            if(e.key==='ArrowDown'){e.preventDefault();pkIdx=Math.min(pkIdx+1,items.length-1);items.forEach((it,i)=>it.classList.toggle('sel',i===pkIdx))}
-            else if(e.key==='ArrowUp'){e.preventDefault();pkIdx=Math.max(pkIdx-1,0);items.forEach((it,i)=>it.classList.toggle('sel',i===pkIdx))}
-            else if((e.key==='Enter'||e.key==='Tab')&&pkIdx>=0&&items[pkIdx]){e.preventDefault();items[pkIdx].click()}
-            else if(e.key==='Escape'){pk.classList.remove('vis');pkIdx=-1}
-          });
+          attachCmdPicker(inp, field.querySelector('#settingsCmdPicker'), key);
         } else {
           inp.onblur=()=>saveSetting(key,inp.value);
         }

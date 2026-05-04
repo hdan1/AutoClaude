@@ -152,12 +152,12 @@ class ClaudeProxy extends EventEmitter {
     return this._executePrintMode(projectDir, options, plan, result);
   }
 
-  _executePrintMode(projectDir, options, plan, result) {
-    return new Promise(async (resolve) => {
-      const args = plan.args;
-      const detection = await claudeDetector.detect();
-      const claudeBin = (detection.path && detection.path !== 'claude') ? detection.path : 'claude';
-      const spawnEnv = this._buildSpawnEnv(projectDir);
+  async _executePrintMode(projectDir, options, plan, result) {
+    const args = plan.args;
+    const detection = await claudeDetector.detect();
+    const claudeBin = (detection.path && detection.path !== 'claude') ? detection.path : 'claude';
+    const spawnEnv = this._buildSpawnEnv(projectDir);
+    return new Promise((resolve) => {
       this.process = spawn(claudeBin, args, {
         cwd: projectDir, stdio: ['pipe', 'pipe', 'pipe'], env: spawnEnv, windowsHide: true,
       });
@@ -207,15 +207,14 @@ class ClaudeProxy extends EventEmitter {
     });
   }
 
-  _executeSDK(projectDir, options, plan, result) {
-    return new Promise(async (resolve) => {
-      const prompt = options?.prompt || '';
-      const args = ClaudeProxy._buildSDKModeArgs(prompt, options, this.config);
-      const detection = await claudeDetector.detect();
-      const claudeBin = (detection.path && detection.path !== 'claude') ? detection.path : 'claude';
-      const spawnEnv = this._buildSpawnEnv(projectDir);
-      spawnEnv.CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS = 'true';
-
+  async _executeSDK(projectDir, options, plan, result) {
+    const prompt = options?.prompt || '';
+    const args = ClaudeProxy._buildSDKModeArgs(prompt, options, this.config);
+    const detection = await claudeDetector.detect();
+    const claudeBin = (detection.path && detection.path !== 'claude') ? detection.path : 'claude';
+    const spawnEnv = this._buildSpawnEnv(projectDir);
+    spawnEnv.CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS = 'true';
+    return new Promise((resolve) => {
       this.process = spawn(claudeBin, args, {
         cwd: projectDir, stdio: ['pipe', 'pipe', 'pipe'], env: spawnEnv, windowsHide: true,
       });

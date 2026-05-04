@@ -8,6 +8,7 @@ const TurnLoopController = require('./lib/turn-loop-controller');
 const contextGuard = require('./lib/context-guard');
 const logger = require('./lib/logger');
 const { extractQuestions } = require('./lib/question-utils');
+const { classifyError, CircuitBreaker, getFallbackModel, SEVERITY } = require('./lib/error-classifier');
 
 const QUESTION_ROUTING_LOG_THROTTLE_MS = 1000;
 
@@ -46,6 +47,10 @@ class SessionManager extends EventEmitter {
     this.sessions = new Map();
     this.autonomy = new AutonomyEngine(globalConfig, workflowManager);
     this._lastQuestionRoutingLog = new Map();
+    this._circuitBreaker = new CircuitBreaker({
+      threshold: globalConfig.resilience?.circuitBreakerThreshold || 5,
+      resetTimeMs: globalConfig.resilience?.circuitBreakerResetMs || 60000,
+    });
   }
 
   setTelegram(tabId, bridge) {
@@ -61,7 +66,7 @@ class SessionManager extends EventEmitter {
       state: {
         running: false, currentStep: '', message: '',
         projectDir, startTime: null, sessionId: null,
-        totalInputTokens: 0, totalOutputTokens: 0, totalCostUsd: 0,
+        totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0, totalCacheCreateTokens: 0, totalCostUsd: 0,
         hooksInstalled: false,
         lastAutoNextPrompt: null,
         activityType: 'idle', activeTool: null,
@@ -132,6 +137,7 @@ class SessionManager extends EventEmitter {
     let turnSessionId = session.state.sessionId;
     let result;
     const loop = new TurnLoopController();
+    session._turnLoop = loop;
 
     while (session.state.running) {
       session.pendingResponse = null;
@@ -156,10 +162,19 @@ class SessionManager extends EventEmitter {
 
       session.state.totalInputTokens += result.inputTokens;
       session.state.totalOutputTokens += result.outputTokens;
+      session.state.totalCacheReadTokens += result.cacheReadTokens || 0;
+      session.state.totalCacheCreateTokens += result.cacheCreateTokens || 0;
       session.state.totalCostUsd += result.costUsd || 0;
       if (result.sessionId) session.state.sessionId = result.sessionId;
 
-      // Crash retry
+      // Error classification + circuit breaker + crash retry
+      const errClass = classifyError(result.exitCode, result.error);
+      if (errClass.retryable) {
+        this._circuitBreaker.recordFailure(errClass);
+      } else if (result.exitCode === 0) {
+        this._circuitBreaker.recordSuccess();
+      }
+
       const crash = loop.checkCrashRetry(this.autonomy, result, this.config);
       if (crash) {
         if (crash.action === 'stop') {
@@ -167,13 +182,33 @@ class SessionManager extends EventEmitter {
           this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Crash Limit', body: crash.reason });
           break;
         }
-        const msg = `Crash retry ${crash.attempt}/${crash.maxRetries} (exit ${crash.exitCode})...`;
+
+        if (!this._circuitBreaker.canAttempt()) {
+          const cooldown = Math.ceil(this._circuitBreaker.remainingCooldownMs / 1000);
+          const cbMsg = `Circuit breaker open \u2014 too many consecutive failures. Cooling down ${cooldown}s...`;
+          this.send(tabId, 'log', { type: 'system', text: cbMsg });
+          this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Circuit Breaker', body: cbMsg });
+          await this._sleepWithHeartbeat(tabId, session, this._circuitBreaker.remainingCooldownMs, 'Circuit breaker cooldown');
+          if (!session.state.running) return;
+        }
+
+        if (errClass.severity === SEVERITY.CAPACITY && this.config.resilience?.modelFallback !== false) {
+          const currentModel = session.state.model || this.config.session?.model || 'auto';
+          const fallback = getFallbackModel(currentModel, this.config.resilience?.fallbackChain);
+          if (fallback && fallback !== currentModel) {
+            this.send(tabId, 'log', { type: 'system', text: `Capacity error \u2014 falling back from ${currentModel} to ${fallback}` });
+            session.state.model = fallback;
+            session.state._originalModel = session.state._originalModel || currentModel;
+          }
+        }
+
+        const msg = `Crash retry ${crash.attempt}/${crash.maxRetries} (exit ${crash.exitCode}, ${errClass.severity || 'unknown'})...`;
         this.send(tabId, 'log', { type: 'system', text: msg });
         this.emit('notify', { type: 'error', title: 'Auto Claude \u2014 Crash Retry', body: msg });
         const delay = this.config.resilience?.crashRetryDelaySecs
           ? this.config.resilience.crashRetryDelaySecs * 1000
           : CRASH_RETRY_DELAY_MS;
-        await this._sleep(delay);
+        await this._sleepWithHeartbeat(tabId, session, delay, 'Retry backoff');
         if (!session.state.running) return;
 
         if (session.pendingResponse) {
@@ -208,11 +243,14 @@ class SessionManager extends EventEmitter {
         if (!session.state.running) return;
         session.state.totalInputTokens += handoffResult.inputTokens;
         session.state.totalOutputTokens += handoffResult.outputTokens;
+        session.state.totalCacheReadTokens += handoffResult.cacheReadTokens || 0;
+        session.state.totalCacheCreateTokens += handoffResult.cacheCreateTokens || 0;
         session.state.totalCostUsd += handoffResult.costUsd || 0;
 
         session.state.sessionId = null;
         this.send(tabId, 'log', { type: 'system', text: '\u2713 Session cleared \u2014 starting fresh with handoff' });
-        turnPrompt = contextGuard.getResumePrompt(session.state);
+        const stateSummary = contextGuard.buildStateSummary(session.state, result);
+        turnPrompt = contextGuard.getResumePrompt(session.state, stateSummary);
         turnMode = 'fresh';
         turnSessionId = null;
         loop.resetForFreshSession();
@@ -507,6 +545,12 @@ class SessionManager extends EventEmitter {
       if (m.costUsd != null) {
         augmented.costUsd = session.state.totalCostUsd + m.costUsd;
       }
+      if (m.cacheReadTokens != null) {
+        augmented.cacheReadTokens = session.state.totalCacheReadTokens + m.cacheReadTokens;
+      }
+      if (m.cacheCreateTokens != null) {
+        augmented.cacheCreateTokens = session.state.totalCacheCreateTokens + m.cacheCreateTokens;
+      }
       // Include per-turn input tokens and context window size for context bar
       if (m.inputTokens != null) {
         augmented.turnInputTokens = m.inputTokens;
@@ -563,6 +607,20 @@ class SessionManager extends EventEmitter {
 
       // Store for timeout fallback
       session._lastQuestionData = questionData;
+
+      // Repeated-question detection: if the same question has been asked too many times,
+      // skip auto-answer and escalate to the user to break confirmation gate loops.
+      if (session._turnLoop && questionText) {
+        const repeated = session._turnLoop.checkRepeatedQuestion(questionText);
+        if (repeated) {
+          this.send(tabId, 'log', { type: 'system', text: `⚠ ${repeated.reason} — escalating to user` });
+          session.waitingForAnswer = true;
+          session.state.message = 'Repeated question — waiting for user';
+          this.sendState(tabId);
+          this.send(tabId, 'question', { options, questionText, multiSelect });
+          return;
+        }
+      }
 
       // Smart routing via autonomy engine
       const decision = this.autonomy.handleQuestion(tabId, questionData, session.telegramBridge);
@@ -793,6 +851,26 @@ class SessionManager extends EventEmitter {
   }
 
   _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  _sleepWithHeartbeat(tabId, session, ms, label) {
+    return new Promise(resolve => {
+      const interval = 5000;
+      let elapsed = 0;
+      const tick = () => {
+        elapsed += interval;
+        if (!session.state.running || elapsed >= ms) {
+          clearInterval(timer);
+          resolve();
+          return;
+        }
+        const remaining = Math.ceil((ms - elapsed) / 1000);
+        session.state.message = `${label}: ${remaining}s remaining...`;
+        this.sendState(tabId);
+      };
+      const timer = setInterval(tick, interval);
+      setTimeout(() => { clearInterval(timer); resolve(); }, ms);
+    });
+  }
 
   _now() { return Date.now(); }
 
