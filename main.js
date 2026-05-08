@@ -102,8 +102,10 @@ const CONFIG_PATH = path.join(__dirname, 'config.json');  // kept for migration 
 let config = {}; // populated after settingsDb.init()
 
 function saveConfig(c) {
-  // Sync the in-memory config object back to SQLite
+  // Sync the in-memory config object back to SQLite and flush synchronously
+  // so session state survives a crash before the next periodic flush.
   settingsDb.syncFromConfigObject(c);
+  settingsDb.flushSync();
 }
 
 function applyConfigInPlace(nextConfig) {
@@ -263,9 +265,8 @@ function sendToTab(tabId, ch, d) {
   const payload = { tabId, ...d };
   if (BATCH_SET.has(ch)) {
     ipcBatch.push({ ch, ...payload });
-    if (!ipcFlushTimer) {
-      ipcFlushTimer = setTimeout(flushIpcBatch, IPC_BATCH_INTERVAL_MS);
-    }
+    if (ipcBatch.length > 500) flushIpcBatch(); // flush immediately if batching too much
+    else if (!ipcFlushTimer) ipcFlushTimer = setTimeout(flushIpcBatch, IPC_BATCH_INTERVAL_MS);
   } else {
     send(ch, payload);
   }
@@ -1512,8 +1513,10 @@ ipcMain.on('open-terminal', withTrustedIpc('open-terminal', (event, data) => {
     } else if (process.platform === 'darwin') {
       spawn('open', ['-a', 'Terminal', projDir], { detached: true, stdio: 'ignore' });
     } else {
-      // Try multiple terminal emulators — x-terminal-emulator is Debian-only
-      const shellCmd = `cd "${projDir}" && claude${skipPerms}`;
+      // Escape path to prevent command injection (projDir from session state is trusted,
+      // but sanitize anyway in case of path normalization edge cases)
+      const safeDir = projDir.replace(/"/g, '\\"').replace(/\\/g, '\\\\');
+      const shellCmd = `cd "${safeDir}" && claude${skipPerms}`;
       const termArgs = {
         'x-terminal-emulator': ['-e', `bash -c '${shellCmd}'`],
         'gnome-terminal':      ['--', 'bash', '-c', shellCmd],

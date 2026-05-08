@@ -39,9 +39,14 @@ class ClaudeProxy extends EventEmitter {
     this.worktreeDir = null;
     this._readCounts = new Map();
     this.sdkMode = false;
+    this._claudeVersion = null; // set on system init event
     this._keepAliveTimer = null;
-  }
+    // Capture version from session-init events (emitted by stream-parser)
+    this.on('session-init', (data) => {
+      if (data.version) this._claudeVersion = data.version;
+    });
 
+  }
   run(projectDir, options) {
     return this._runWithRetry(projectDir, options, 0);
   }
@@ -303,7 +308,7 @@ class ClaudeProxy extends EventEmitter {
   // SDK mode
   _supportsSDKMode() {
     try {
-      const version = this.config._claudeVersion || '';
+      const version = this._claudeVersion || '';
       return this._compareVersions(version, SDK_MIN_VERSION) >= 0;
     } catch { return false; }
   }

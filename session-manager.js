@@ -25,7 +25,6 @@ class SessionManager extends EventEmitter {
         const hasBridge = !!session?.telegramBridge;
         const isRunning = session?.telegramBridge?.isRunning;
         const chatCount = session?.telegramBridge?.chatIds?.size || 0;
-        const logger = require('./lib/logger');
         if (!session) logger.debug('tg-debug', 'No session for ' + tabId);
         else if (!hasBridge) logger.debug('tg-debug', 'No telegramBridge on session ' + tabId);
         else if (!isRunning) logger.debug('tg-debug', 'telegramBridge not running for ' + tabId);
